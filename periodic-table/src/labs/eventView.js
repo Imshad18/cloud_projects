@@ -59,12 +59,35 @@ function approach(ctx, w, H, t, s) {
 // ---------- detector (CMS-like, 3.8 T) ----------
 function detector(ctx, w, H, t, s, mode) {
   const cx = w / 2, cy = H / 2, R = Math.min(w, H) * 0.47;
-  const ring = (r0, r1, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(cx, cy, R * r1, 0, 7); ctx.arc(cx, cy, R * r0, 0, 7, true); ctx.fill(); };
+  const TAU = Math.PI * 2;
+  const ring = (r0, r1, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(cx, cy, R * r1, 0, TAU); ctx.moveTo(cx + R * r0, cy); ctx.arc(cx, cy, R * r0, TAU, 0, true); ctx.fill(); };
+  const poly = (r, n = 12, rot = Math.PI / 12) => { for (let i = 0; i <= n; i++) { const a = rot + i / n * TAU, x = cx + Math.cos(a) * R * r, y = cy + Math.sin(a) * R * r; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } };
+  const spokes = (r0, r1, n, c, off = 0) => { ctx.strokeStyle = c; ctx.lineWidth = 1; ctx.beginPath(); for (let i = 0; i < n; i++) { const a = off + i / n * TAU, ca = Math.cos(a), sa = Math.sin(a); ctx.moveTo(cx + ca * R * r0, cy + sa * R * r0); ctx.lineTo(cx + ca * R * r1, cy + sa * R * r1); } ctx.stroke(); };
+  const circle = (r, c, lw = 1) => { ctx.strokeStyle = c; ctx.lineWidth = lw; ctx.beginPath(); ctx.arc(cx, cy, R * r, 0, TAU); ctx.stroke(); };
   if (mode === '3d') mode = 'rphi';
   if (mode === 'rphi') {
-    ring(0.5, 0.6, 'rgba(110,231,168,.08)'); ring(0.62, 0.8, 'rgba(92,200,240,.08)'); ring(0.81, 0.83, 'rgba(160,160,170,.25)');
-    for (let i = 0; i < 12; i++) { ctx.strokeStyle = 'rgba(255,107,125,.18)'; ctx.lineWidth = R * 0.05; ctx.beginPath(); ctx.arc(cx, cy, R * 0.9, i / 12 * Math.PI * 2 + 0.05, (i + 1) / 12 * Math.PI * 2 - 0.05); ctx.stroke(); }
-    ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1; for (const r of [0.15, 0.3, 0.45]) { ctx.beginPath(); ctx.arc(cx, cy, R * r, 0, 7); ctx.stroke(); }
+    // muon system: iron return yoke (dodecagon) with four stations of chambers
+    ctx.fillStyle = 'rgba(120,60,66,.10)'; ctx.beginPath(); poly(0.985 / Math.cos(Math.PI / 12)); poly(0.84 / Math.cos(Math.PI / 12)); ctx.fill('evenodd');
+    for (const [r, wd] of [[0.855, 0.014], [0.89, 0.014], [0.925, 0.014], [0.96, 0.012]]) {
+      for (let i = 0; i < 12; i++) { // one flat chamber per side of the dodecagon
+        const m = Math.PI / 12 + (i + 0.5) / 12 * TAU, nx = Math.cos(m), ny = Math.sin(m), half = R * r * Math.tan(Math.PI / 12) * 0.9;
+        ctx.save(); ctx.translate(cx + nx * R * r, cy + ny * R * r); ctx.rotate(m + Math.PI / 2);
+        ctx.fillStyle = 'rgba(255,107,125,.16)'; ctx.fillRect(-half, -R * wd / 2, half * 2, R * wd); ctx.strokeStyle = 'rgba(255,107,125,.35)'; ctx.lineWidth = 1; ctx.strokeRect(-half, -R * wd / 2, half * 2, R * wd);
+        ctx.restore();
+      }
+    }
+    // solenoid magnet (3.8 T)
+    const sg = ctx.createRadialGradient(cx, cy, R * 0.805, cx, cy, R * 0.835); sg.addColorStop(0, 'rgba(120,125,140,.35)'); sg.addColorStop(0.5, 'rgba(210,215,230,.55)'); sg.addColorStop(1, 'rgba(120,125,140,.35)');
+    ring(0.805, 0.835, sg);
+    // hadron calorimeter: brass/scintillator wedges with depth segments
+    ring(0.62, 0.8, 'rgba(92,200,240,.07)'); spokes(0.62, 0.8, 72, 'rgba(92,200,240,.10)'); circle(0.68, 'rgba(92,200,240,.08)'); circle(0.74, 'rgba(92,200,240,.08)'); circle(0.62, 'rgba(92,200,240,.25)'); circle(0.8, 'rgba(92,200,240,.25)');
+    // electromagnetic calorimeter: lead-tungstate crystals
+    ring(0.5, 0.6, 'rgba(110,231,168,.07)'); spokes(0.5, 0.6, 180, 'rgba(110,231,168,.08)'); circle(0.5, 'rgba(110,231,168,.28)'); circle(0.6, 'rgba(110,231,168,.28)');
+    // tracker: silicon pixel and strip layers
+    for (const r of [0.025, 0.05, 0.075, 0.1]) circle(r, 'rgba(255,255,255,.10)');
+    for (let i = 0; i < 10; i++) circle(0.16 + i * 0.032, 'rgba(255,255,255,.045)');
+    circle(0.47, 'rgba(255,255,255,.14)');
+    circle(0.01, 'rgba(255,255,255,.35)', 1.5); // beam pipe
   } else {
     const x0 = w * 0.05, x1 = w * 0.95, hh = R;
     const box = (a, b, c) => { ctx.fillStyle = c; ctx.fillRect(x0, cy - hh * b, x1 - x0, hh * (b - a)); ctx.fillRect(x0, cy + hh * a, x1 - x0, hh * (b - a)); };
@@ -72,7 +95,7 @@ function detector(ctx, w, H, t, s, mode) {
     ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x0, cy - 1, x1 - x0, 2);
   }
   ctx.font = `600 11px ${FONT}`; ctx.fillStyle = 'rgba(200,200,210,.5)';
-  if (mode === 'rphi') { ctx.fillText('tracker', cx + 4, cy - R * 0.46); ctx.fillText('EM calorimeter', cx + 4, cy - R * 0.55); ctx.fillText('hadron calorimeter', cx + 4, cy - R * 0.72); ctx.fillText('muon chambers', cx + 4, cy - R * 0.95); }
+  if (mode === 'rphi') { ctx.fillText('silicon tracker', cx + 4, cy - R * 0.44); ctx.fillText('EM calorimeter', cx + 4, cy - R * 0.545); ctx.fillText('hadron calorimeter', cx + 4, cy - R * 0.71); ctx.fillText('solenoid 3.8 T', cx + 4, cy - R * 0.815); ctx.fillText('muon chambers + iron yoke', cx + 4, cy - R * 0.9); }
   const grow = clamp(t / 0.9, 0, 1);
   if (t < 0.35) { const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.35); g.addColorStop(0, `rgba(255,255,255,${1 - t / 0.35})`); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, H); }
   if (s.qgp && t < 2.5) { const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.25); g.addColorStop(0, `rgba(255,120,60,${0.7 * (1 - t / 2.5)})`); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, H); }

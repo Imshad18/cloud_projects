@@ -51,7 +51,7 @@ const DATA = [
 const UNITS = [['eV', 1e-6], ['keV', 1e-3], ['MeV', 1], ['GeV', 1e3], ['TeV', 1e6], ['PeV', 1e9], ['EeV', 1e12], ['ZeV', 1e15]];
 
 export function buildCollider(root, { openElement }) {
-  const st = { beam: 'p', target: findNuclide('Au-197'), mode: 'fixed', type: 'linac', L: 100, KE: 85 };
+  const st = { beam: 'p', target: 'p', mode: 'collider', type: 'ring', L: 26659, KE: 6.8e6 }; // opens on LHC proton collisions
   let res = null, kin = null, kT = null, col = null, P = null, T = null, kind = 'pp';
 
   const beamBtn = nuclideButton({ value: st.beam, title: 'Choose the projectile', particles: ['e-', 'e+', 'p', 'pbar', 'n'], onPick: v => { st.beam = v; update(); } });
@@ -71,7 +71,7 @@ export function buildCollider(root, { openElement }) {
   keIn.addEventListener('change', applyKE); keUnit.addEventListener('change', applyKE);
   spIn.addEventListener('change', () => { const b = parseFloat(spIn.value) / 100; if (b > 0 && b < 1) { st.KE = keFromBeta(particleOf(st.beam), b); update(); } else toast('Enter a speed below 100% of light speed'); });
   const evSel = h('select', { id: 'col-evmode' });
-  const puSel = h('select', { id: 'col-pu' }, [['auto', 'Automatic (LHC Run 3 at LHC energies)'], ['0', 'None: a single clean collision'], ['35', '35 (LHC Run 2)'], ['55', '55 (LHC Run 3)'], ['140', '140 (High-Luminosity LHC)']].map(([v, l]) => h('option', { value: v }, l)));
+  const puSel = h('select', { id: 'col-pu' }, [['0', 'None: a single clean collision'], ['auto', 'Automatic (LHC Run 3 at LHC energies)'], ['35', '35 (LHC Run 2)'], ['55', '55 (LHC Run 3)'], ['140', '140 (High-Luminosity LHC)']].map(([v, l]) => h('option', { value: v }, l)));
   const pileup = () => { if (kind !== 'pp' && kind !== 'ppbar') return 0; const v = puSel.value; if (v !== 'auto') return +v; return col.sqrtS >= 5e6 && st.mode === 'collider' ? 55 : 0; };
 
   const accCv = h('canvas', { 'aria-label': 'Accelerator animation' });
@@ -423,6 +423,7 @@ export function buildCollider(root, { openElement }) {
     drawAcc(phase === 'acc' ? clamp(accT / tAcc, 0, 1) : phase === 'idle' ? 0 : 1);
   }
   function drawAcc(f) {
+    const wantH = st.type === 'ring' ? '150px' : '96px'; if (accCv.parentElement && accCv.parentElement.style.height !== wantH) accCv.parentElement.style.height = wantH;
     const ctx = accCv.getContext('2d'); const { w, h: H } = fitCanvas(accCv, ctx);
     ctx.fillStyle = SCREEN(); ctx.fillRect(0, 0, w, H);
     const col0 = P?.q === 0 ? '#9aa2b8' : '#8fdcff';
@@ -435,11 +436,44 @@ export function buildCollider(root, { openElement }) {
       const px = x0 + (x1 - x0) * f * f;
       for (let k = 0; k < 8; k++) glowC(ctx, px - k * 6 * f, y, 8 - k * 0.8, col0, 1 - k * 0.12);
     } else {
-      const cx = (x0 + x1) / 2, cy = H / 2, R = Math.min((x1 - x0) * 0.42, H * 0.36);
-      ctx.strokeStyle = 'rgba(166,176,200,.35)'; ctx.lineWidth = 8; ctx.beginPath(); ctx.ellipse(cx, cy, R * 2.2, R, 0, 0, 7); ctx.stroke();
-      const ang = phase === 'idle' ? 0 : accT * (1 + f * 12);
-      for (let k = 0; k < 10; k++) glowC(ctx, cx + Math.cos(ang - k * 0.05) * R * 2.2, cy + Math.sin(ang - k * 0.05) * R, 7 - k * 0.5, col0, 1 - k * 0.09);
-      if (st.mode === 'collider') for (let k = 0; k < 10; k++) glowC(ctx, cx + Math.cos(-ang + k * 0.05 + Math.PI) * R * 2.2, cy + Math.sin(-ang + k * 0.05 + Math.PI) * R, 7 - k * 0.5, '#ffb38a', 1 - k * 0.09);
+      // ring seen from above: tunnel, bending magnets, RF cavities, injector and detectors
+      const cx = (x0 + x1) / 2, cy = H / 2, ry = H * 0.34, rx = Math.min((x1 - x0) * 0.46, ry * 3.4);
+      const P2 = a => [cx + Math.cos(a) * rx, cy + Math.sin(a) * ry];
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(166,176,200,.10)'; ctx.lineWidth = 16; ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(166,176,200,.35)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+      // injector: a small booster ring feeding the main ring
+      const [ix, iy] = P2(Math.PI * 0.72);
+      ctx.strokeStyle = 'rgba(166,176,200,.3)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(ix - 26, iy + 4, 11, 0, Math.PI * 2); ctx.moveTo(ix - 16, iy); ctx.lineTo(ix, iy); ctx.stroke();
+      ctx.font = `600 10.5px ${font}`; ctx.fillStyle = 'rgba(200,205,220,.55)'; ctx.textAlign = 'center'; ctx.fillText('injector', ix - 26, iy + 28);
+      // bending dipoles
+      const nMag = 56;
+      for (let i = 0; i < nMag; i++) {
+        const a = (i + 0.5) / nMag * Math.PI * 2; if (Math.abs(Math.sin(a)) > 0.985 || Math.abs(Math.cos(a)) > 0.995) continue;
+        const [x, y] = P2(a), [x2, y2] = P2(a + 0.045);
+        ctx.strokeStyle = 'rgba(92,160,240,.55)'; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x2, y2); ctx.stroke();
+      }
+      // RF cavities (accelerating section) pulse while the beam gains energy
+      const pulse = phase === 'acc' ? 0.45 + 0.45 * Math.sin(accT * 25) : 0.35;
+      const rfA = -Math.PI / 4; // LHC Point 4
+      for (let i = -2; i <= 2; i++) { const [x, y] = P2(rfA + i * 0.05); ctx.fillStyle = `rgba(242,184,75,${pulse})`; ctx.fillRect(x - 4, y - 7, 8, 14); }
+      { const [x, y] = P2(rfA); ctx.fillStyle = 'rgba(242,184,75,.85)'; ctx.fillText('RF cavities', x + 44, y - 8); }
+      // detectors at the crossing points
+      const isLHC = Math.abs(st.L - 26659) < 100;
+      const dets = st.mode === 'collider' ? (isLHC ? [[Math.PI / 2, 'ATLAS'], [0, 'ALICE'], [-Math.PI / 2, 'CMS'], [Math.PI, 'LHCb']] : [[Math.PI / 2, 'Detector']]) : [[Math.PI / 2, 'Target']];
+      for (const [a, name] of dets) {
+        const [x, y] = P2(a), main = a === Math.PI / 2;
+        ctx.fillStyle = main ? 'rgba(255,255,255,.9)' : 'rgba(220,220,230,.45)'; ctx.beginPath(); ctx.arc(x, y, main ? 7 : 5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = main ? '#fff' : 'rgba(220,220,230,.6)'; ctx.font = `${main ? 700 : 600} 11px ${font}`;
+        ctx.fillText(name, x + (Math.cos(a) > 0.5 ? 24 : Math.cos(a) < -0.5 ? -24 : 0), y + (Math.sin(a) > 0.5 ? -12 : Math.sin(a) < -0.5 ? 20 : 4));
+      }
+      ctx.textAlign = 'left';
+      // bunch trains; they meet at the main detector (bottom) when the collision happens
+      const ang = phase === 'idle' ? 0 : accT * (1.2 + f * 10);
+      const end = Math.PI / 2, a1 = phase === 'acc' ? end - 12 + ang : end, a2 = Math.PI - a1;
+      const bunches = (a0, dir, c) => { for (let b = 0; b < 6; b++) for (let k = 0; k < 6; k++) { const a = a0 - dir * (b * 0.34 + k * 0.03); const [x, y] = P2(a); glowC(ctx, x, y, 5 - k * 0.6, c, (1 - k * 0.15) * (1 - b * 0.12)); } };
+      if (phase !== 'idle') { bunches(a1, 1, col0); if (st.mode === 'collider') bunches(a2, -1, '#ffb38a'); }
+      if (phase === 'hit' && phaseT < 0.6) { const [x, y] = P2(end); glowC(ctx, x, y, 18 * (1 - phaseT / 0.6) + 4, '#ffffff', 1 - phaseT / 0.6); }
     }
     const shown = kin && P ? kinematics(P, kin.KE * f * f) : null;
     ctx.textAlign = 'left';
@@ -503,7 +537,7 @@ export function buildCollider(root, { openElement }) {
   const stageEl = ev.root;
   stageEl.classList.add('stage', 'stage-tall');
   stageEl.style.aspectRatio = ''; stageEl.style.maxHeight = '';
-  const accBox = h('div', { class: 'stage', style: { height: '96px' } }, accCv);
+  const accBox = h('div', { class: 'stage', style: { height: st.type === 'ring' ? '150px' : '96px' } }, accCv);
   const resultCard = h('div', { class: 'card result' }, title, text, noteBox, warnBox, evInfo, prodBox, whatIf);
   const tabsC = tabs([
     { key: 'plots', label: 'Session plots', body: h('div', { class: 'stack' }, h('div', { class: 'row' }, ...[[1, 'Collide once'], [100, '×100'], [1e4, '×10,000'], [1e6, '×1 million'], [1e9, '×1 billion']].map(([n, l]) => h('button', { class: `btn ${n === 1 ? 'primary' : ''}`, onclick: () => (n === 1 ? run() : runMany(n)) }, l))),
@@ -536,7 +570,9 @@ export function buildCollider(root, { openElement }) {
   });
 
   update(); renderOdds();
-  return { show() { if (!raf) { last = 0; raf = requestAnimationFrame(frame); } ev.start(); }, hide() { cancelAnimationFrame(raf); raf = 0; ev.stop(); auto.left = 0; autoUi(); } };
+  presetSel.value = '0';
+  let firstShow = true;
+  return { show() { if (!raf) { last = 0; raf = requestAnimationFrame(frame); } ev.start(); if (firstShow) { firstShow = false; run(); } }, hide() { cancelAnimationFrame(raf); raf = 0; ev.stop(); auto.left = 0; autoUi(); } };
 }
 
 const NAMES = { mu: p => `muon μ${p.q > 0 ? '⁺' : '⁻'}`, e: p => `electron e${p.q > 0 ? '⁺' : '⁻'}`, gamma: () => 'photon γ', jet: () => 'jet (quark or gluon)', bjet: () => 'b-quark jet', nu: () => 'neutrino (missing energy)', trk: p => `${p.name || 'π'}${p.q > 0 ? '⁺' : '⁻'}`, tau: p => `tau τ${p.q > 0 ? '⁺' : '⁻'}` };
