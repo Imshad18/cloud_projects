@@ -5,9 +5,10 @@ const FONT = '"Source Sans 3", system-ui, sans-serif';
 
 // Histogram in the style of LHC papers: observed counts with √N error bars,
 // expected background (filled) and expected signal (stacked line).
-export function histChart({ title, xlabel, ylabel = 'Events', logY = false, logX = false }) {
+export function histChart({ title, xlabel, ylabel = 'Events', logY = false, logX = false, info = '' }) {
   const cv = h('canvas', {});
-  const root = h('div', { class: 'chart' }, cv);
+  const box = h('div', { class: 'chart' }, cv);
+  const root = h('figure', { class: 'chart-fig' }, box, info ? h('figcaption', { class: 'chart-cap' }, info) : '');
   let data = null;
   function draw() {
     const ctx = cv.getContext('2d'); const { w, h: H } = fitCanvas(cv, ctx);
@@ -64,14 +65,15 @@ export function histChart({ title, xlabel, ylabel = 'Events', logY = false, logX
     for (const lab of data.labels || []) { const x = X(lab[0]); if (x < L || x > w - R) continue; ctx.fillStyle = '#ffd27a'; ctx.font = `700 12px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText(lab[1], x, Math.max(T + 12, Y(lab[2]) - 10)); ctx.textAlign = 'left'; }
     if (!total) { ctx.fillStyle = MUTED; ctx.font = `600 14px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText(data.empty || 'No events yet', (L + w - R) / 2, (T + H - B) / 2); ctx.textAlign = 'left'; }
   }
-  new ResizeObserver(() => draw()).observe(root);
+  new ResizeObserver(() => draw()).observe(box);
   return { root, set(d) { data = d; draw(); }, draw };
 }
 
 // Horizontal bar chart (log scale) for process counts.
-export function barChart({ title }) {
+export function barChart({ title, info = '' }) {
   const cv = h('canvas', {});
-  const root = h('div', { class: 'chart', style: { height: '330px' } }, cv);
+  const box = h('div', { class: 'chart', style: { height: '330px' } }, cv);
+  const root = h('figure', { class: 'chart-fig' }, box, info ? h('figcaption', { class: 'chart-cap' }, info) : '');
   let rows = [];
   function draw() {
     const ctx = cv.getContext('2d'); const { w, h: H } = fitCanvas(cv, ctx);
@@ -91,7 +93,7 @@ export function barChart({ title }) {
       ctx.fillStyle = INK; ctx.textAlign = 'left'; const t = fmtN(v); ctx.fillText(t, Math.min(X(v) + 6, w - ctx.measureText(t).width - 6), y + rowH * 0.68);
     });
   }
-  new ResizeObserver(() => draw()).observe(root);
+  new ResizeObserver(() => draw()).observe(box);
   return { root, set(r) { rows = r; draw(); } };
 }
 

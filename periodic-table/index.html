@@ -1,21 +1,22 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="bookish">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Stardust Periodic Table</title>
 <meta name="description" content="An interactive 3D periodic table and nuclear physics lab: cosmic origins, isotopes, half-lives, fusion, fission and a particle collider.">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#efe7d6">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Source+Sans+3:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
 <link rel="stylesheet" href="css/style.css">
-<script>try{var t=localStorage.getItem("pt.theme");if(t)document.documentElement.dataset.theme=JSON.parse(t);}catch(e){}</script>
+<script>try{var t=localStorage.getItem("pt.theme2");t=t?JSON.parse(t):"bookish";if(t==="dark")document.documentElement.removeAttribute("data-theme");else document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme="bookish";}</script>
 </head>
 <body>
 <div id="stage" aria-label="3D periodic table">
   <canvas id="bg"></canvas>
   <div id="css3d"></div>
+  <button class="btn" id="reset-float" title="Reset the view">↺ Reset view</button>
 </div>
 
 <header id="topbar">
@@ -30,6 +31,7 @@
     <button data-view="fusion">Fusion</button>
     <button data-view="fission">Fission</button>
     <button data-view="collider">Collider</button>
+    <button data-view="radioactivity">Radioactivity</button>
     <button data-view="body">Human Body</button>
     <button data-view="quiz">Quiz</button>
   </nav>
@@ -55,8 +57,12 @@
       </div>
     </div>
     <div class="ctl">
+      <label>Rotation</label>
+      <div class="seg" id="rot-seg"><button data-rot="locked">Locked</button><button data-rot="limited" class="on">Limited</button><button data-rot="free">Free</button></div>
+    </div>
+    <div class="ctl">
       <label>View</label>
-      <button class="btn" id="reset-view" title="Double-click empty space also resets">Reset view</button>
+      <button class="btn" id="reset-view" title="Double-click empty space also resets">↺ Reset view</button>
     </div>
     <div class="ctl">
       <label for="colorby">Colour by</label>
@@ -105,6 +111,7 @@
   <section class="view" id="view-fusion" hidden></section>
   <section class="view" id="view-fission" hidden></section>
   <section class="view" id="view-collider" hidden></section>
+  <section class="view" id="view-radioactivity" hidden></section>
   <section class="view" id="view-body" hidden></section>
 </main>
 

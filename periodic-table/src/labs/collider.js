@@ -91,14 +91,14 @@ export function buildCollider(root, { openElement }) {
   const session = newSession();
   const sesInfo = h('div', { class: 'row', style: { gap: '18px' } });
   const charts = {
-    proc: barChart({ title: 'Collisions by type' }),
-    diphoton: histChart({ title: 'Two-photon mass (Higgs → γγ search)', xlabel: 'm(γγ) [GeV]', ylabel: 'Events / GeV' }),
-    fourl: histChart({ title: 'Four-lepton mass (Higgs → ZZ* → 4ℓ)', xlabel: 'm(4ℓ) [GeV]', ylabel: 'Events / 3 GeV' }),
-    dimuon: histChart({ title: 'Dimuon mass spectrum', xlabel: 'm(μμ) [GeV]', ylabel: 'Events / bin', logX: true, logY: true }),
-    mult: histChart({ title: 'Charged particles per collision', xlabel: 'Number of charged particles', ylabel: 'Collisions', logY: true }),
-    pt: histChart({ title: 'Transverse momentum of charged particles', xlabel: 'pT [GeV]', ylabel: 'Particles', logY: true }),
-    angle: histChart({ title: 'Scattering angle (Rutherford)', xlabel: 'Angle [degrees]', ylabel: 'Nuclei', logY: true }),
-    dijet: histChart({ title: 'Two-jet mass (up to your collision energy)', xlabel: 'm(jj) [GeV]', ylabel: 'Events / bin', logX: true, logY: true }),
+    proc: barChart({ title: 'Collisions by type', info: 'How many collisions of each kind you have made. The arrow → means "decays into". A soft collision is a glancing hit where nothing special is made; almost every collision is one. The bar scale is logarithmic: each step is ten times more.' }),
+    diphoton: histChart({ title: 'Two-photon mass (Higgs → γγ search)', xlabel: 'm(γγ) [GeV]', ylabel: 'Events / GeV', info: 'Every event with two energetic photons (γ, particles of light) is placed by the combined mass of the pair, m(γγ). Ordinary photon pairs make the smooth falling background. A Higgs boson that decays into two photons always lands at 125 GeV, so with enough data a small bump grows there. This is how the Higgs was discovered in 2012.' }),
+    fourl: histChart({ title: 'Four-lepton mass (Higgs → ZZ* → 4ℓ)', xlabel: 'm(4ℓ) [GeV]', ylabel: 'Events / 3 GeV', info: 'Events with four leptons (ℓ = an electron or a muon). The peak at 91 GeV is a single Z boson, the bump at 125 GeV is a Higgs decaying via two Z bosons (one of them lighter than normal, written Z*), and the broad rise above 180 GeV is pairs of real Z bosons (2 × 91 GeV). The rarest and cleanest Higgs signal.' }),
+    dimuon: histChart({ title: 'Dimuon mass spectrum', xlabel: 'm(μμ) [GeV]', ylabel: 'Events / bin', logX: true, logY: true, info: 'Pairs of opposite-charge muons (μ⁺μ⁻, heavy cousins of the electron). Each spike is a particle that decays into two muons: ω and φ (light quarks), J/ψ (a charm quark bound to its antiquark), Υ "upsilon" (bottom quarks) and Z (carrier of the weak force). Both axes are logarithmic.' }),
+    mult: histChart({ title: 'Charged particles per collision', xlabel: 'Number of charged particles', ylabel: 'Collisions', logY: true, info: 'How many charged particles each collision sprayed into the tracker. Most collisions make a few dozen; a rare few make hundreds. Lead-lead collisions make thousands.' }),
+    pt: histChart({ title: 'Transverse momentum of charged particles', xlabel: 'pT [GeV]', ylabel: 'Particles', logY: true, info: 'pT is how much momentum a particle carries sideways, away from the beam. Almost all particles are slow (left). The long tail to the right comes from hard, head-on hits between quarks and gluons.' }),
+    angle: histChart({ title: 'Scattering angle (Rutherford)', xlabel: 'Angle [degrees]', ylabel: 'Nuclei', logY: true, info: 'How far the projectiles bounce off the target. Most barely turn, but a few bounce straight back. Rutherford saw exactly this in 1909 and concluded that atoms have a tiny, heavy nucleus.' }),
+    dijet: histChart({ title: 'Two-jet mass (up to your collision energy)', xlabel: 'm(jj) [GeV]', ylabel: 'Events / bin', logX: true, logY: true, info: 'A jet (j) is a narrow spray of particles made by a single quark or gluon. m(jj) is the combined mass of the two strongest jets. The curve falls steeply and stops at your collision energy. Physicists scan it for bumps from unknown heavy particles.' }),
   };
   const chartGrid = h('div', { class: 'chart-grid' });
 
@@ -209,6 +209,7 @@ export function buildCollider(root, { openElement }) {
       session.n++; session.sigmaInel = 0;
       session.labels[k] = k === 'scatter' ? 'Scattered (Rutherford)' : k; session.counts[k] = (session.counts[k] || 0) + 1;
       if (k === 'scatter') fillAngle(1);
+      logEvent({ process: session.labels[k], nuclear: true });
       return { kind: 'nuclear', anim: res.anim, a1: P.A, a2: T.A, lepton1: !!P.lepton, lepton2: !!T.lepton, product: res.product, productLabels: res.productLabels, fragments: res.fragments, newElement: res.newElement, quasi: res.quasi, quasiLabels: res.quasiLabels, supercritical: res.supercritical, collider: st.mode === 'collider', label1: P.label, label2: T.label, closest: res.channels.find(c => c[0] === 'closest approach')?.[1] };
     }
     const sqG = sqGeV();
@@ -244,6 +245,7 @@ export function buildCollider(root, { openElement }) {
     if (lep.length >= 4) recon.push(`m(4ℓ) = ${invMass(lep.slice(0, 4)).toFixed(1)} GeV`);
     else if (lep.length >= 2) recon.push(`m(ℓℓ) = ${invMass(lep.slice(0, 2)).toFixed(2)} GeV`);
     const charged = parts.filter(p => p.q && (p.type === 'trk' || p.type === 'mu' || p.type === 'e')).length;
+    logEvent({ process: proc.label, key: proc.key, charged, pileup: session.pu || 0, recon: recon.join('; '), parts });
     const hard = parts.filter(p => !p.soft).sort((a, b) => pT(b) - pT(a)).slice(0, 10);
     evInfo.replaceChildren(
       h('div', { class: 'row' }, h('span', { class: 'chip' }, h('i', { style: { background: proc.key.startsWith('H') ? '#ff4d5e' : '#f2b84b' } }), proc.label)),
@@ -328,11 +330,51 @@ export function buildCollider(root, { openElement }) {
     const tot = session.counts.scatter || N;
     H0.bkg = H0.edges.slice(0, -1).map((a0, i) => { const a = Math.max(a0, 5), b = H0.edges[i + 1]; if (b <= 5) return 0; const xa = Math.sin(a * Math.PI / 360) ** 2, xb = Math.sin(b * Math.PI / 360) ** 2; return tot * (1 / xa - 1 / xb) / (1 / xmin - 1); });
   }
+  // ---------- data export ----------
+  const MAX_EVENTS = 300;
+  function logEvent(e) { session.evSeq++; session.events.push({ n: session.evSeq, ...e }); if (session.events.length > MAX_EVENTS) session.events.shift(); }
+  function download(name, text, type) {
+    const a = h('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name });
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  const fileBase = () => `stardust_${P.label}-${T.label}_${fmtE(col.sqrtS).replace(/[^\w.]+/g, '')}`.replace(/[^\w.-]+/g, '_');
+  const csv = rows => rows.map(r => r.map(v => (typeof v === 'string' && /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)).join(',')).join('\n');
+  function setup() {
+    return { beam: P.label, target: T.label, mode: st.mode, machine: st.type, length_m: st.L, beam_kinetic_energy_MeV: kin.KE, sqrt_s_MeV: col.sqrtS, sqrt_sNN_MeV: col.sqrtSNN || null, pileup: pileup(), record: evSel.value };
+  }
+  function exportJSON() {
+    const hist = Object.fromEntries(Object.entries(session.hist).map(([k, H0]) => [k, { edges: H0.edges, observed: H0.obs, ...(H0.bkg?.length ? { expected_background: H0.bkg } : {}), ...(H0.sig?.length ? { expected_signal: H0.sig } : {}) }]));
+    const L = session.sigmaInel ? session.n / session.sigmaInel / 1000 : null;
+    download(`${fileBase()}_session.json`, JSON.stringify({ generator: 'Stardust collider lab', exported: new Date().toISOString(), setup: setup(), collisions: session.n, integrated_luminosity_fb: L, higgs_produced: session.higgs,
+      counts: Object.fromEntries(Object.entries(session.counts).map(([k, v]) => [session.labels[k] || k, v])), histograms: hist,
+      events: session.events.map(e => ({ ...e, parts: e.parts?.map(q => ({ type: q.type, q: q.q, px: +q.px.toFixed(4), py: +q.py.toFixed(4), pz: +q.pz.toFixed(4), E: +q.E.toFixed(4), ...(q.pileup ? { pileup: true } : {}) })) })) }, null, 1), 'application/json');
+  }
+  function exportHists() {
+    const rows = [['histogram', 'bin_low', 'bin_high', 'observed', 'expected_background', 'expected_signal']];
+    for (const [k, H0] of Object.entries(session.hist)) for (let i = 0; i < H0.obs.length; i++) rows.push([k, +H0.edges[i].toPrecision(6), +H0.edges[i + 1].toPrecision(6), H0.obs[i], H0.bkg?.length ? +H0.bkg[i].toPrecision(6) : '', H0.sig?.length ? +H0.sig[i].toPrecision(6) : '']);
+    rows.push([]); rows.push(['process', 'count']);
+    for (const [k, v] of Object.entries(session.counts)) rows.push([session.labels[k] || k, v]);
+    download(`${fileBase()}_histograms.csv`, csv(rows), 'text/csv');
+  }
+  function exportEvents() {
+    if (!session.events.length) { toast('Run some single collisions first: bulk runs only fill the histograms'); return; }
+    const rows = [['event', 'process', 'charged_tracks', 'pileup_collisions', 'reconstructed', 'particle', 'type', 'charge', 'px_GeV', 'py_GeV', 'pz_GeV', 'E_GeV', 'pT_GeV', 'eta', 'phi', 'from_pileup']];
+    for (const e of session.events) {
+      if (!e.parts) { rows.push([e.n, e.process, '', '', '', '', '', '', '', '', '', '', '', '', '', '']); continue; }
+      e.parts.forEach((q, i) => rows.push([e.n, e.process, e.charged, e.pileup, e.recon, i, q.type, q.q || 0, q.px.toFixed(4), q.py.toFixed(4), q.pz.toFixed(4), q.E.toFixed(4), pT(q).toFixed(4), etaOf(q).toFixed(4), Math.atan2(q.py, q.px).toFixed(4), q.pileup ? 1 : 0]));
+    }
+    download(`${fileBase()}_events.csv`, csv(rows), 'text/csv');
+  }
+  const exportRow = h('div', { class: 'row export-row' }, h('span', { class: 'small muted' }, 'Export data:'),
+    h('button', { class: 'btn small', onclick: exportHists, title: 'Every histogram bin and the process counts, for Excel, Python or ROOT' }, 'Histograms (CSV)'),
+    h('button', { class: 'btn small', onclick: exportEvents, title: `Every particle of the last ${MAX_EVENTS} single collisions: momentum, energy, pT, η, φ` }, 'Events, particle by particle (CSV)'),
+    h('button', { class: 'btn small', onclick: exportJSON, title: 'Settings, counts, histograms and recorded events in one file' }, 'Whole session (JSON)'));
+
   function newSession() {
     const lin = (lo, hi, step) => { const e = []; for (let v = lo; v <= hi + 1e-9; v += step) e.push(+v.toFixed(6)); return e; };
     const logE = (lo, hi, n) => Array.from({ length: n + 1 }, (_, i) => lo * Math.pow(hi / lo, i / n));
     const mk = (edges, full) => ({ edges, obs: new Array(edges.length - 1).fill(0), bkg: full ? new Array(edges.length - 1).fill(0) : [], sig: full ? new Array(edges.length - 1).fill(0) : [] });
-    return { key: '', n: 0, counts: {}, labels: {}, higgs: 0, sigmaInel: 0, hist: { dijet: mk(logE(100, 14000, 60), true), diphoton: mk(lin(100, 160, 1), true), fourl: mk(lin(70, 250, 3), true), dimuon: mk(logE(0.4, 150, 180), true), mult: mk(lin(0, 200, 5)), pt: mk(lin(0, 20, 0.5)), angle: mk(lin(0, 180, 5), true) } };
+    return { key: '', n: 0, events: [], evSeq: 0, counts: {}, labels: {}, higgs: 0, sigmaInel: 0, hist: { dijet: mk(logE(100, 14000, 60), true), diphoton: mk(lin(100, 160, 1), true), fourl: mk(lin(70, 250, 3), true), dimuon: mk(logE(0.4, 150, 180), true), mult: mk(lin(0, 200, 5)), pt: mk(lin(0, 20, 0.5)), angle: mk(lin(0, 180, 5), true) } };
   }
   function resetSession(key) {
     Object.assign(session, newSession(), { key });
@@ -449,6 +491,14 @@ export function buildCollider(root, { openElement }) {
   function autoUi() { const done = auto.total - auto.left; autoBtn.textContent = auto.left > 0 ? 'Stop' : 'Start'; autoBar.style.width = auto.total ? `${(done / auto.total) * 100}%` : '0'; autoTxt.textContent = auto.total ? `${done.toLocaleString()} of ${auto.total.toLocaleString()} collisions shown` : ''; }
   autoN.addEventListener('input', () => renderOdds());
 
+  const guide = h('details', { class: 'guide' }, h('summary', {}, 'How to read these plots, and what the symbols mean'),
+    h('div', { class: 'guide-grid' },
+      h('div', {}, h('h4', {}, 'On the plots'), h('dl', {},
+        ...[['●  dot', 'Your data: how many events fell in that slice'], ['│  vertical line', 'Error bar. Counts wobble by chance by about √N, so a bar through 1 event runs from 0 to 2. Small counts mean big bars: do not trust a bump until the bars are short.'], ['■  blue area', 'Expected background: what known physics makes without the thing you are searching for'], ['—  red line', 'Expected total if the signal (for example the Higgs) is there'], ['Events / GeV', 'Counts in each 1 GeV wide slice of mass'], ['Log scale', 'Each gridline is ten times the one below (1, 10, 100…)'], ['9.9×10^8, 10⁹', 'Scientific notation: 9.9×10⁸ = 990,000,000; 10⁹ = one billion']].flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]))),
+      h('div', {}, h('h4', {}, 'Particles'), h('dl', {},
+        ...[['γ', 'photon, a particle of light'], ['e, μ, τ', 'electron, muon, tau: the three charged leptons'], ['ℓ', 'any lepton (electron or muon)'], ['ν', 'neutrino: passes through everything, seen only as missing energy'], ['j', 'jet: a spray of particles from one quark or gluon'], ['b, b̄', 'bottom quark and its antiquark (the bar means anti)'], ['p, p̄', 'proton and antiproton'], ['π, K', 'pion and kaon, the commonest light particles'], ['H', 'Higgs boson, 125 GeV'], ['W, Z, Z*', 'carriers of the weak force; Z* is a lighter, short-lived "virtual" Z'], ['t', 'top quark, the heaviest known particle'], ['J/ψ, Υ', 'a charm or bottom quark bound to its own antiquark'], ['X(3872)', 'a tetraquark (four quarks). "X" because its nature was unknown when found in 2003; 3872 is its mass in MeV'], ['Pc(4312)', 'a pentaquark (five quarks) containing charm (c); mass 4312 MeV']].flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]))),
+      h('div', {}, h('h4', {}, 'Quantities and units'), h('dl', {},
+        ...[['→', 'decays into'], ['m(γγ), m(4ℓ)…', 'invariant mass: the mass of the parent particle rebuilt from its decay products'], ['pT', 'momentum sideways to the beam'], ['η', 'pseudorapidity: angle from the beam line (0 = straight out sideways)'], ['√s', 'total collision energy'], ['eV → keV → MeV → GeV → TeV → PeV → EeV → ZeV', 'energy units, each 1000 times the last. A proton weighs about 1 GeV'], ['fb⁻¹, pb⁻¹', 'integrated luminosity: how much data. 1 fb⁻¹ ≈ 80 trillion LHC proton collisions; 1 pb⁻¹ is a thousand times less'], ['Pile-up', 'extra collisions happening in the same bunch crossing, drawn fainter']].flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])))));
   // ---------- layout ----------
   const stageEl = ev.root;
   stageEl.classList.add('stage', 'stage-tall');
@@ -458,7 +508,7 @@ export function buildCollider(root, { openElement }) {
   const tabsC = tabs([
     { key: 'plots', label: 'Session plots', body: h('div', { class: 'stack' }, h('div', { class: 'row' }, ...[[1, 'Collide once'], [100, '×100'], [1e4, '×10,000'], [1e6, '×1 million'], [1e9, '×1 billion']].map(([n, l]) => h('button', { class: `btn ${n === 1 ? 'primary' : ''}`, onclick: () => (n === 1 ? run() : runMany(n)) }, l))),
       h('div', { class: 'row' }, h('span', { class: 'small muted' }, 'Run a whole LHC dataset:'), ...[[1, '1 fb⁻¹'], [139, '139 fb⁻¹ (Run 2)'], [3000, '3000 fb⁻¹ (HL-LHC)']].map(([L, l]) => h('button', { class: 'btn small', onclick: () => lumiRun(L) }, l)), h('button', { class: 'btn small', onclick: () => { resetSession(session.key); renderCharts(); renderOdds(); } }, 'Reset session')),
-      sesInfo, chartGrid,
+      exportRow, guide, sesInfo, chartGrid,
       h('p', { class: 'hint-text', style: { margin: 0 } }, 'Every collision you run, one at a time or in bulk, is added here. Counts follow Poisson statistics from measured cross sections. The Higgs always shows up at 125 GeV whatever the beam energy, because that is its mass.')), onShow: () => renderCharts() },
     { key: 'numbers', label: 'Numbers', body: h('div', { class: 'cols' }, h('div', { class: 'card stack' }, h('h3', {}, 'Your beam'), beamStats), h('div', { class: 'card stack' }, h('h3', {}, 'Your machine'), machStats), h('div', { class: 'card stack' }, h('h3', {}, 'The collision'), colStats, chanBox)) },
     { key: 'experiments', label: 'Famous experiments', body: presetGrid },

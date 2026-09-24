@@ -49,6 +49,7 @@ function setMode(k) {
   $('#temp-row').hidden = k !== 'state';
   layoutChrome();
   scene.applyMode(modes[k]); renderLegend(); refilter();
+  scene.setTitle(k === 'origin' ? 'and where in the universe each was made' : `coloured by ${(modes[k].label || k).toLowerCase()}`);
 }
 function refilter() {
   const m = modes[state.mode];
@@ -97,6 +98,7 @@ const builders = {
   isotopes: () => import('./labs/isotopes.js').then(m => m.buildIsotopes($('#view-isotopes'), { openElement: openFromLab })),
   fusion: () => import('./labs/fusion.js').then(m => m.buildFusion($('#view-fusion'), { openElement: openFromLab })),
   fission: () => import('./labs/fission.js').then(m => m.buildFission($('#view-fission'), { openElement: openFromLab })),
+  radioactivity: () => import('./labs/radioactivity.js').then(m => m.buildRadioactivity($('#view-radioactivity'), { openElement: openFromLab })),
   body: () => import('./labs/body.js').then(m => m.buildBody($('#view-body'), { openElement: openFromLab })),
   collider: () => import('./labs/collider.js').then(m => m.buildCollider($('#view-collider'), { openElement: openFromLab })),
 };
@@ -132,6 +134,11 @@ $('#layouts').addEventListener('click', e => {
 });
 $('#colorby').addEventListener('change', e => setMode(e.target.value));
 $('#reset-view').addEventListener('click', () => scene.fitCamera());
+$('#reset-float').addEventListener('click', () => scene.fitCamera());
+const rot0 = storeGet('pt.rot', 'limited');
+const setRot = r => { for (const b of $$('#rot-seg button')) b.classList.toggle('on', b.dataset.rot === r); scene.setRotation(r); storeSet('pt.rot', r); };
+$('#rot-seg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setRot(b.dataset.rot); });
+setRot(rot0);
 const temp = $('#temp');
 const setT = T => { state.T = T; temp.value = T; $('#temp-val').textContent = `${T} K (${Math.round(T - 273.15)} °C)`; if (state.mode === 'state') { scene.applyMode(modes.state); refilter(); } };
 temp.addEventListener('input', () => setT(+temp.value));
@@ -191,7 +198,7 @@ addEventListener('keydown', e => {
 });
 
 // ---------- appearance ----------
-const look = { theme: storeGet('pt.theme', 'dark'), bg: storeGet('pt.bg', 'stars'), motion: storeGet('pt.motion', true) };
+const look = { theme: storeGet('pt.theme2', 'bookish'), bg: storeGet('pt.bg2', 'nebula'), motion: storeGet('pt.motion', true) };
 function applyLook() {
   if (look.theme === 'dark') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = look.theme;
   themeChanged();
@@ -200,7 +207,7 @@ function applyLook() {
   $('#motion-toggle').checked = look.motion;
   scene.setAppearance(look);
   const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = getComputedStyle(document.documentElement).getPropertyValue('--ground').trim();
-  storeSet('pt.theme', look.theme); storeSet('pt.bg', look.bg); storeSet('pt.motion', look.motion);
+  storeSet('pt.theme2', look.theme); storeSet('pt.bg2', look.bg); storeSet('pt.motion', look.motion);
 }
 $('#settings-btn').addEventListener('click', e => { e.stopPropagation(); const p = $('#settings'); p.hidden = !p.hidden; $('#settings-btn').setAttribute('aria-expanded', String(!p.hidden)); });
 addEventListener('click', e => { const p = $('#settings'); if (!p.hidden && !p.contains(e.target) && e.target !== $('#settings-btn')) p.hidden = true; });

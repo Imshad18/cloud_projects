@@ -191,7 +191,7 @@ export class TableScene {
     addEventListener('pointermove', ev => {
       if (!pts.has(ev.pointerId)) return;
       pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
-      if (!down || pts.size !== 1) return;
+      if (!down || pts.size !== 1 || this.rotMode === 'locked') return;
       if (!rotating && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) < 5) return;
       rotating = true;
       const dx = ev.clientX - last[0], dy = ev.clientY - last[1]; last = [ev.clientX, ev.clientY];
@@ -203,6 +203,12 @@ export class TableScene {
       const test = cam.position.clone().sub(tgt).applyQuaternion(q2).normalize();
       if (Math.abs(test.y) > 0.97) q2.identity();
       q.multiply(q2);
+      if (this.rotMode === 'limited') { // keep the view within a comfortable range of angles
+        const d = cam.position.clone().sub(tgt).applyQuaternion(q).normalize();
+        const yaw = Math.atan2(d.x, d.z), pitch = Math.asin(Math.max(-1, Math.min(1, d.y)));
+        const flat = ['table', 'origins', 'timeline', 'grid'].includes(this.layout);
+        if ((flat && Math.abs(yaw) > 0.6) || Math.abs(pitch) > 0.5) return;
+      }
       for (const v of [cam.position, tgt]) v.sub(pivot).applyQuaternion(q).add(pivot);
       cam.quaternion.premultiply(q);
       this.cssDirty = true;
@@ -224,6 +230,13 @@ export class TableScene {
     dom.addEventListener('dblclick', ev => { const t = ev.target.closest && ev.target.closest('.tile'); if (t) this.focusOn(t._el); else this.fitCamera(); });
     dom.addEventListener('contextmenu', ev => ev.preventDefault());
   }
+  setRotation(mode) {
+    this.rotMode = mode;
+    this.controls.mouseButtons = { LEFT: mode === 'locked' ? THREE.MOUSE.PAN : -1, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    this.controls.touches = { ONE: mode === 'locked' ? THREE.TOUCH.PAN : -1, TWO: THREE.TOUCH.DOLLY_PAN };
+    if (mode !== 'free') this.fitCamera();
+  }
+  setTitle(sub) { if (this.titleEl) this.titleEl.lastChild.textContent = sub; }
   // Fly the camera to a tile
   focusOn(e) {
     const o = this.objOf(e), p = o.position.clone();
@@ -293,6 +306,20 @@ export class TableScene {
       const o = new CSS3DObject(lbl); o.position.set(c.x, c.y, c.z); o._layout = 'origins';
       this.scene.add(o); this.labels.push(o);
     }
+    // Printed-chart furniture for the table layout: title, group and period numbers, f-block markers
+    const addLbl = (el, x, y, z = 0) => { const o = new CSS3DObject(el); o.position.set(x, y, z); o._layout = 'table'; this.scene.add(o); this.labels.push(o); return o; };
+    const X = gx => (gx - 9.5) * TW, Y = gy => -(gy - 5.3) * TH;
+    const topOf = { 1: 1, 2: 2, 13: 2, 14: 2, 15: 2, 16: 2, 17: 2, 18: 1 };
+    for (let g = 1; g <= 18; g++) addLbl(h('div', { class: 'pt-num' }, String(g)), X(g), Y(topOf[g] || 4) + TH * 0.58);
+    for (let pd = 1; pd <= 7; pd++) addLbl(h('div', { class: 'pt-num' }, String(pd)), X(1) - TW * 0.72, Y(pd));
+    this.titleEl = h('div', { class: 'pt-title' }, h('div', { class: 't1' }, 'Periodic Table of the Elements'), h('div', { class: 't2' }, 'and where in the universe each was made'));
+    addLbl(this.titleEl, X(7.5), Y(1.55));
+    addLbl(h('div', { class: 'pt-ph', style: { '--c': '#d88bf5' } }, h('b', {}, '57–71'), h('span', {}, 'La–Lu')), X(3), Y(6));
+    addLbl(h('div', { class: 'pt-ph', style: { '--c': '#f58bc4' } }, h('b', {}, '89–103'), h('span', {}, 'Ac–Lr')), X(3), Y(7));
+    addLbl(h('div', { class: 'pt-flabel' }, 'Lanthanides'), X(1.6), Y(9) - 50);
+    addLbl(h('div', { class: 'pt-flabel' }, 'Actinides'), X(1.6), Y(10) - 50);
+    for (const l of this.labels) if (l._layout === 'table') l.element.classList.add('on');
+
     // Discovery timeline
     const buckets = {};
     this.targets.timeline = ELEMENTS.map(e => {
@@ -320,6 +347,7 @@ export class TableScene {
       p0: o.position.clone(), p1: tg[i].position.clone(), q0: o.quaternion.clone(), q1: tg[i].quaternion.clone(),
     }));
     for (const l of this.labels) l.element.classList.toggle('on', l._layout === name);
+    this.rotMode = this.rotMode || 'limited';
     this.fitCamera();
   }
 
