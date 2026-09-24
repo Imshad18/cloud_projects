@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloud Projects</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+  :root { color-scheme: dark; --bg: #06070f; --card: #0e1122; --line: rgba(170,185,255,.14); --text: #e9ecf8; --muted: #8f97ba; --accent: #ffd27a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: radial-gradient(900px 500px at 80% -10%, rgba(88,60,170,.3), transparent 60%), var(--bg); color: var(--text); font: 16px/1.5 'IBM Plex Sans', system-ui, sans-serif; padding: 48px 16px; }
+  main { max-width: 860px; margin: 0 auto; display: grid; gap: 28px; }
+  h1 { font: 800 clamp(28px, 6vw, 44px)/1.05 'Unbounded', 'Arial Black', sans-serif; margin: 0; }
+  p { color: var(--muted); margin: 8px 0 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  a.card { display: grid; gap: 8px; padding: 20px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); color: inherit; text-decoration: none; transition: border-color .15s, transform .15s; }
+  a.card:hover, a.card:focus-visible { border-color: var(--accent); transform: translateY(-2px); outline: none; }
+  a.card b { font: 600 18px 'Unbounded', sans-serif; }
+  a.card span { color: var(--muted); font-size: 14px; }
+  a.card i { font-style: normal; color: var(--accent); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Cloud Projects</h1>
+    <p>Interactive projects, one folder each.</p>
+  </header>
+  <div class="grid">
+    <a class="card" href="periodic-table/">
+      <b>Stardust</b>
+      <span>3D periodic table with the cosmic origin of every element, isotopes, half-lives, and fusion, fission and particle collider labs.</span>
+      <i>Open →</i>
+    </a>
+  </div>
+</main>
+</body>
+</html>
