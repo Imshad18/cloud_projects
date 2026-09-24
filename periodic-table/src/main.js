@@ -1,4 +1,4 @@
-import { $, $$, h, toast, storeGet, storeSet } from './util.js';
+import { $, $$, h, toast, storeGet, storeSet, themeChanged } from './util.js';
 import { ELEMENTS, byZ, bySym, searchElements, CATEGORIES } from './store.js';
 import { SOURCES } from './data/origins.js';
 import { TableScene } from './scene.js';
@@ -6,7 +6,7 @@ import { buildModes } from './colormodes.js';
 import { Panel } from './panel.js';
 import { Quiz, showCompare } from './quiz.js';
 
-const state = { mode: storeGet('pt.mode', 'category'), T: 298, year: 2026, focus: null, view: 'table', compareFrom: null };
+const state = { mode: storeGet('pt.mode2', 'origin'), T: 298, year: 2026, focus: null, view: 'table', compareFrom: null };
 const modes = buildModes(() => state.T);
 if (!modes[state.mode]) state.mode = 'category';
 
@@ -44,7 +44,7 @@ function hover(e, ev) {
 
 // ---------- colour modes, legend, filters ----------
 function setMode(k) {
-  state.mode = k; state.focus = null; storeSet('pt.mode', k);
+  state.mode = k; state.focus = null; storeSet('pt.mode2', k);
   $('#colorby').value = k;
   $('#temp-row').hidden = k !== 'state';
   layoutChrome();
@@ -66,7 +66,7 @@ function renderLegend() {
     kids.push(h('div', { class: 'rampbox' }, h('div', { class: 'eyebrow' }, m.label || ''), h('div', { class: 'bar', style: { background: L.css } }), h('div', { class: 'ends' }, h('span', {}, L.min), h('span', {}, L.max))));
     if (L.extra) kids.push(h('div', { class: 'items' }, L.extra.map(x => h('span', { class: 'item' }, h('span', { class: 'dot', style: { background: x.color } }), x.label))));
   }
-  if (m.note) kids.push(h('div', { class: 'note' }, m.note));
+  if (m.note) kids.push(h('div', { class: 'lnote' }, m.note));
   box.replaceChildren(...kids);
   layoutChrome();
 }
@@ -91,8 +91,9 @@ const views = {};
 const builders = {
   origins: () => import('./labs/origins.js').then(m => m.buildOrigins($('#view-origins'), { openElement: openFromLab, highlightSource: src => { openView('table'); setMode('origin'); state.focus = src; refilter(); renderLegend(); } })),
   isotopes: () => import('./labs/isotopes.js').then(m => m.buildIsotopes($('#view-isotopes'), { openElement: openFromLab })),
-  fusion: () => import('./labs/fusion.js').then(m => m.buildFusion($('#view-fusion'))),
-  fission: () => import('./labs/fission.js').then(m => m.buildFission($('#view-fission'))),
+  fusion: () => import('./labs/fusion.js').then(m => m.buildFusion($('#view-fusion'), { openElement: openFromLab })),
+  fission: () => import('./labs/fission.js').then(m => m.buildFission($('#view-fission'), { openElement: openFromLab })),
+  body: () => import('./labs/body.js').then(m => m.buildBody($('#view-body'), { openElement: openFromLab })),
   collider: () => import('./labs/collider.js').then(m => m.buildCollider($('#view-collider'), { openElement: openFromLab })),
 };
 function openFromLab(e) { openView('table'); select(e); }
@@ -162,7 +163,9 @@ search.addEventListener('blur', () => setTimeout(() => { results.hidden = true; 
 addEventListener('keydown', e => {
   if (e.target.matches('input, select, textarea')) return;
   if (e.key === '/') { e.preventDefault(); search.focus(); return; }
+  if (!$('#chooser').hidden) return;
   if (e.key === 'Escape') {
+    if (!$('#settings').hidden) { $('#settings').hidden = true; return; }
     if (!$('#lightbox').hidden) { $('#lightbox').hidden = true; return; }
     if (!$('#compare').hidden) { $('#compare').hidden = true; return; }
     if (panel.open) { panel.close(); scene.select(null); return; }
@@ -180,6 +183,25 @@ addEventListener('keydown', e => {
   const lay = ['table', 'sphere', 'helix', 'grid', 'origins', 'timeline'][+e.key - 1];
   if (lay) $(`#layouts button[data-layout="${lay}"]`).click();
 });
+
+// ---------- appearance ----------
+const look = { theme: storeGet('pt.theme', 'dark'), bg: storeGet('pt.bg', 'stars'), motion: storeGet('pt.motion', true) };
+function applyLook() {
+  if (look.theme === 'dark') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = look.theme;
+  themeChanged();
+  for (const b of $$('#theme-seg button')) b.classList.toggle('on', b.dataset.theme === look.theme);
+  for (const b of $$('#bg-seg button')) b.classList.toggle('on', b.dataset.bg === look.bg);
+  $('#motion-toggle').checked = look.motion;
+  scene.setAppearance(look);
+  const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = getComputedStyle(document.documentElement).getPropertyValue('--ground').trim();
+  storeSet('pt.theme', look.theme); storeSet('pt.bg', look.bg); storeSet('pt.motion', look.motion);
+}
+$('#settings-btn').addEventListener('click', e => { e.stopPropagation(); const p = $('#settings'); p.hidden = !p.hidden; $('#settings-btn').setAttribute('aria-expanded', String(!p.hidden)); });
+addEventListener('click', e => { const p = $('#settings'); if (!p.hidden && !p.contains(e.target) && e.target !== $('#settings-btn')) p.hidden = true; });
+$('#theme-seg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { look.theme = b.dataset.theme; applyLook(); } });
+$('#bg-seg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { look.bg = b.dataset.bg; applyLook(); } });
+$('#motion-toggle').addEventListener('change', e => { look.motion = e.target.checked; applyLook(); });
+applyLook();
 
 // ---------- boot ----------
 $('#colorby').value = state.mode;

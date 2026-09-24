@@ -21,22 +21,17 @@ export function particle(kind, nucl) {
   return { kind, label: r.label, sym: r.label, name: `${byZ[r.z].name}-${r.a}`, mass, q: r.z, A: r.a, Z: r.z, r, nucleus: true };
 }
 
-export function kinematics(P, beta) {
-  const g = 1 / Math.sqrt(1 - beta * beta);
-  const E = g * P.mass, KE = (g - 1) * P.mass, p = g * beta * P.mass;
-  return { beta, gamma: g, E, KE, p, v: beta * C, lambda: p > 0 ? HC / p : Infinity, KEperA: P.A ? KE / P.A : null };
+// Kinematics from kinetic energy (MeV). Works from 1 eV up to far beyond the OMG particle.
+export function kinematics(P, KE) {
+  KE = Math.max(0, KE);
+  const g = 1 + KE / P.mass, E = P.mass + KE, p = Math.sqrt(KE * KE + 2 * KE * P.mass);
+  const oneMinusBeta = g > 1e4 ? 1 / (2 * g * g) : 1 - Math.sqrt(1 - 1 / (g * g));
+  const beta = 1 - oneMinusBeta;
+  return { beta, oneMinusBeta, gamma: g, E, KE, p, v: beta * C, lambda: p > 0 ? HC / p : Infinity, KEperA: P.A ? KE / P.A : null };
 }
+export function keFromBeta(P, b) { return P.mass * (1 / Math.sqrt(1 - b * b) - 1); }
 
-// Speed slider: 0..1000 → β from 1% c to 1 - 10⁻¹²
-export function sliderToBeta(s) {
-  if (s <= 500) return 0.01 + (s / 500) * 0.89;
-  return 1 - 0.1 * Math.pow(10, -((s - 500) / 500) * 11);
-}
-export function betaToSlider(b) {
-  if (b <= 0.9) return Math.round(((b - 0.01) / 0.89) * 500);
-  return Math.round(500 + (-Math.log10((1 - b) / 0.1) / 11) * 500);
-}
-export function betaFromKE(P, KE) { const g = 1 + KE / P.mass; return Math.sqrt(1 - 1 / (g * g)); }
+export const OMG_MEV = 3.2e14; // Oh-My-God cosmic ray, 1991: 3.2 × 10²⁰ eV
 
 export function machine(P, K, type, length) {
   const rfPerTurn = P.lepton ? 3500 : 16; // MV per lap: LEP-style RF for electrons, LHC-style for hadrons
@@ -62,6 +57,12 @@ export function machine(P, K, type, length) {
     out.feasible = out.B < 2 ? 'normal iron magnets' : out.B < 9 ? 'superconducting magnets (like the LHC)' : out.B < 16 ? 'next-generation superconducting magnets' : out.B < 50 ? 'beyond current magnet technology' : 'impossible with any known magnet';
     out.ok = out.B < 50 && out.u0 < q * rfPerTurn;
     if (out.u0 >= q * rfPerTurn) out.feasible = `synchrotron radiation loss (${out.u0.toExponential(2)} MeV/turn) exceeds RF power: make the ring bigger`;
+  }
+  // What it would take with today's best technology
+  if (P.q) {
+    const q = Math.abs(P.q);
+    out.ringNeeded = 2 * Math.PI * ((K.p / 1000) / (0.299792458 * q * 8.33)) / 0.66; // LHC dipoles
+    out.linacNeeded = (K.KE / q) / 100; // 100 MV/m
   }
   return out;
 }
@@ -221,11 +222,12 @@ export function outcome(P1, K1, P2, K2, mode, col) {
   const sNN = (col.sqrtSNN || col.sqrtS) / 1000;
   const npart = (a1 || 1) + (a2 || 1);
   if (heavy) {
+    const dnde = 1.02 * (0.92 * (a1 + a2) / 2) * 10.1 * Math.pow(sNN * 1000 / 5020, 0.31) / 1.02;
     res.title = sNN > 10 ? 'Quark-gluon plasma' : 'Hot, dense nuclear matter';
     res.text = sNN > 10
-      ? `The nuclei melt into a droplet of quark-gluon plasma at over 2 trillion K, the state of the whole universe a microsecond after the Big Bang. It behaves as a nearly perfect liquid and cools into ${Math.round(npart / 2 * chargedMultiplicity(sNN) * (1 + 0.15 * Math.log(Math.max(1, sNN / 10)))).toLocaleString()} charged particles.`
+      ? `The nuclei melt into a droplet of quark-gluon plasma at over 2 trillion K, the state of the whole universe a microsecond after the Big Bang. It flows as a nearly perfect liquid, then cools into about ${Math.round(dnde).toLocaleString()} charged particles per unit of rapidity (ALICE measured 1943 for central lead-lead at 5.02 TeV).`
       : 'The nuclei pile up into matter several times denser than a normal nucleus, like the inside of a neutron star, boiling off pions and kaons.';
-    res.nch = Math.round(npart / 2 * chargedMultiplicity(sNN) * (1 + 0.15 * Math.log(Math.max(1, sNN / 10))));
+    res.nch = Math.round(5 * dnde);
     if (sNN > 100) res.hard = ['jet', 'jet'];
     res.qgp = sNN > 10;
     return res;
@@ -259,8 +261,46 @@ export function outcome(P1, K1, P2, K2, mode, col) {
   return res;
 }
 
+// Liquid-drop fission barrier (MeV), with actinides held near their measured ~6 MeV.
+export function fissionBarrier(Z, A) {
+  const x = (Z * Z / A) / 50.88, Es0 = 17.8 * Math.pow(A, 2 / 3);
+  let Bf = x < 0.67 ? 0.83 * Math.pow(1 - x, 3) * Es0 : Math.max(0, 0.38 * (0.75 - x) * Es0);
+  if (Z >= 88 && Z <= 110) Bf = Math.min(Math.max(Bf, 5), 6.5);
+  return Bf;
+}
+// What would happen if the two nuclei did merge, whatever the energy.
+export function whatIfFused(P1, P2, Ecm) {
+  const Z = P1.Z + P2.Z, A = P1.A + P2.A;
+  if (!P1.A || !P2.A || !Z) return null;
+  const m1 = atomicMass(P1.Z, P1.A), m2 = atomicMass(P2.Z, P2.A), mc = atomicMass(Z, A);
+  const Q = (m1.m + m2.m - mc.m) * U;
+  const x = (Z * Z / A) / 50.88; // fissility
+  const Es0 = 17.8 * Math.pow(A, 2 / 3);
+  let Bf = x < 0.67 ? 0.83 * Math.pow(1 - x, 3) * Es0 : Math.max(0, 0.38 * (0.75 - x) * Es0);
+  if (Z >= 88 && Z <= 110) Bf = Math.max(Bf, 5.5); // shell effects keep actinides near 6 MeV
+  const Ex = Ecm + Q;
+  const N = A - Z, Nstable = Math.round(A - (A / (1.98 + 0.0155 * Math.pow(A, 2 / 3)))); // N of the stability valley
+  let fate;
+  if (Z > 172) fate = `Its charge (Z = ${Z}) is above about 173, where quantum electrodynamics predicts the electric field is strong enough to tear electron-positron pairs out of the vacuum. It would instantly split apart.`;
+  else if (x >= 1) fate = `Fissility ${x.toFixed(2)} is above 1: the electric repulsion beats the surface tension, so there is no fission barrier at all. It would fly apart in about 10⁻²¹ s, before it could even be called a nucleus.`;
+  else if (Ex > Bf + 8) fate = `With ${Ex.toFixed(0)} MeV of excitation but a fission barrier of only ~${Bf.toFixed(0)} MeV, it would most likely fission or boil off many neutrons.`;
+  else fate = `It would be a ${Z > 118 ? 'never-seen superheavy' : 'known'} element${Z <= 118 ? ` (${byZ[Z].name})` : ''} with a fission barrier of ~${Bf.toFixed(1)} MeV, cooling by emitting neutrons and gamma rays.`;
+  return { Z, A, name: Z <= 118 ? `${byZ[Z].sym}-${A}` : `element ${Z}, mass ${A}`, Q, measured: mc.measured && m1.measured && m2.measured, x, Bf, Ex, fate, neutronRich: N - Nstable };
+}
+
 function fuse(res, P1, P2, Ecm, tunnel) {
   const Z = P1.Z + P2.Z, A = P1.A + P2.A;
+  if (P1.Z * P2.Z > 2500) { // very heavy pairs: quasi-fission dominates
+    res.view = 'nuclear'; res.anim = 'fuse'; res.quasi = true; res.supercritical = Z >= 173;
+    const za = Math.round(Z * 0.43), aa = Math.round(A * 0.43);
+    const f1 = nearNuc(za, aa), f2 = nearNuc(Z - za, A - aa);
+    res.quasiLabels = [f1?.label || `Z=${za}`, f2?.label || `Z=${Z - za}`];
+    res.product = [f1, f2].filter(Boolean);
+    res.title = res.supercritical ? 'Supercritical field and quasi-fission' : 'Quasi-fission';
+    res.text = `The nuclei touch and stick for about 10⁻²¹ seconds, forming a giant dinuclear system with ${Z} protons. They exchange protons and neutrons, then split apart again (quasi-fission) into ${res.quasiLabels.join(' and ')}.${res.supercritical ? ` With Z = ${Z} above ~173, the electric field is so strong that the vacuum should spontaneously emit positrons. Experiments at GSI (Germany) in the 1980s collided uranium with uranium to look for exactly this.` : ''} A true compound nucleus almost never forms: the electric repulsion of ${P1.Z} × ${P2.Z} protons is too strong.`;
+    res.channels.push(['combined charge', Z, `Z = ${Z}`]);
+    return res;
+  }
   const m1 = atomicMass(P1.Z, P1.A), m2 = atomicMass(P2.Z, P2.A), mc = atomicMass(Z, A);
   const Qf = (m1.m + m2.m - mc.m) * U;
   let Ex = Ecm + Qf;
@@ -304,6 +344,7 @@ function fuse(res, P1, P2, Ecm, tunnel) {
 }
 
 // Heavy residue close to the bigger nucleus, plus light fragments and free nucleons.
+function nearNuc(z, a) { for (const [dz, da] of [[0, 0], [0, 1], [0, -1], [0, 2], [0, -2], [1, 0], [-1, 0], [0, 3], [0, -3]]) { const r = nuc(z + dz, a + da); if (r && r.hl != null) return r; } return nuc(z, a) || null; }
 function fragments(P1, P2, perA = 50) {
   const big = P1.A >= P2.A ? P1 : P2, small = big === P1 ? P2 : P1;
   const lost = Math.max(2, Math.min(big.A - 6, Math.round(big.A * Math.min(0.55, 0.04 + perA / 500))));

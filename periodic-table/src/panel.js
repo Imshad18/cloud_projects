@@ -1,4 +1,4 @@
-import { h, $, fmt, fmtTime, sci, fitCanvas, wavelengthRGB, rgba, storeGet, storeSet } from './util.js';
+import { h, $, fmt, fmtTime, sci, fitCanvas, wavelengthRGB, rgba, storeGet, storeSet, SCREEN } from './util.js';
 import { ELEMENTS, byZ, CATEGORIES } from './store.js';
 import { SOURCES } from './data/origins.js';
 import { SPECTRA, FLAME } from './data/extras.js';
@@ -177,22 +177,48 @@ export class Panel {
     const viewer = atomViewer();
     const isoSel = h('select', { id: 'atom-iso', 'aria-label': 'Isotope' }, el.isotopes.filter(i => !i.iso && (i.hl === -1 || i.hl > 0 || i.ab > 0)).map(i => h('option', { value: i.a, selected: i === el.mainIso }, `${el.sym}-${i.a}  (${i.a - el.n} neutrons)`)));
     const tag = h('div', { class: 'tag' });
-    const setTag = a => { tag.textContent = `${el.n} protons · ${a - el.n} neutrons · ${el.n} electrons`; };
-    box.append(tag, h('div', { class: 'atom-ctl' },
-      h('button', { class: 'icon-btn', title: 'Slower', onclick: () => { viewer.speed = Math.max(0.1, viewer.speed / 2); } }, '−'),
-      h('button', { class: 'icon-btn', title: 'Faster', onclick: () => { viewer.speed = Math.min(16, viewer.speed * 2); } }, '+')));
-    this.body.append(box);
+    let iso = el.mainIso;
+    const mode = { m: storeGet('pt.atomMode', 'bohr'), color: 'type', hidden: new Set() };
+    const speedCtl = h('div', { class: 'atom-ctl' },
+      h('button', { class: 'icon-btn', title: 'Slower electrons', onclick: () => { viewer.speed = Math.max(0.1, viewer.speed / 2); } }, '−'),
+      h('button', { class: 'icon-btn', title: 'Faster electrons', onclick: () => { viewer.speed = Math.min(16, viewer.speed * 2); } }, '+'));
+    box.append(tag, speedCtl);
+    const modeSeg = h('div', { class: 'seg' },
+      h('button', { 'data-m': 'bohr', onclick: () => setMode('bohr') }, 'Planetary model'),
+      h('button', { 'data-m': 'orb', onclick: () => setMode('orb') }, 'Quantum orbitals'));
+    const orbCtl = h('div', { class: 'sec' });
+    const bohrCtl = h('div', { class: 'field' }, h('label', { for: 'atom-iso' }, 'Isotope shown'), isoSel);
+    this.body.append(modeSeg, box, bohrCtl, orbCtl);
     viewer.mount(box);
-    const iso = el.mainIso;
-    viewer.show(el, iso); setTag(iso.a);
-    isoSel.onchange = () => { const a = +isoSel.value; viewer.show(el, el.isotopes.find(i => i.a === a && !i.iso)); setTag(a); };
+    const render = () => {
+      for (const b of modeSeg.children) b.classList.toggle('on', b.dataset.m === mode.m);
+      speedCtl.hidden = mode.m !== 'bohr'; bohrCtl.hidden = mode.m !== 'bohr'; orbCtl.hidden = mode.m !== 'orb';
+      if (mode.m === 'bohr') { viewer.show(el, iso); tag.textContent = `${el.n} protons · ${iso.a - el.n} neutrons · ${el.n} electrons`; return; }
+      const subs = viewer.showOrbitals(el, mode);
+      tag.textContent = 'Each dot is a place the electron could be found';
+      orbCtl.replaceChildren(
+        h('div', { class: 'panel-title' }, h('h3', {}, 'Orbitals'), h('div', { class: 'seg' },
+          h('button', { class: mode.color === 'type' ? 'on' : '', onclick: () => { mode.color = 'type'; render(); } }, 'Colour by type'),
+          h('button', { class: mode.color === 'phase' ? 'on' : '', onclick: () => { mode.color = 'phase'; render(); } }, 'Colour by phase'))),
+        h('div', { class: 'orb-chips' },
+          h('button', { onclick: () => { mode.hidden = new Set(); render(); } }, 'All'),
+          h('button', { onclick: () => { const top = Math.max(...subs.map(x => x.n)); mode.hidden = new Set(subs.filter(x => x.n < top && !(x.l >= 2 && x.n >= top - 2 && x.e < 4 * x.l + 2)).map(x => x.name)); render(); } }, 'Outer only'),
+          ...subs.map(x => h('button', { class: mode.hidden.has(x.name) ? 'off' : '', title: `Z_eff ≈ ${x.zeff.toFixed(2)}`, onclick: () => { mode.hidden.has(x.name) ? mode.hidden.delete(x.name) : mode.hidden.add(x.name); render(); } },
+            h('i', { style: { background: ['#6fc3ff', '#ff8a5c', '#6ee7a8', '#c79bff'][x.l] } }), `${x.name}`, h('sup', {}, String(x.e))))),
+        h('div', { class: 'tbl-wrap' }, h('table', { class: 'data' },
+          h('thead', {}, h('tr', {}, h('th', {}, 'Subshell'), h('th', { class: 'num' }, 'Electrons'), h('th', {}, 'Orbitals filled'), h('th', { class: 'num' }, 'Effective charge'))),
+          h('tbody', {}, subs.map(x => h('tr', {}, h('td', {}, h('b', {}, x.name)), h('td', { class: 'num' }, String(x.e)), h('td', {}, x.orbitals.map(o => `${o.label.slice(1)}${o.occ === 2 ? '↑↓' : '↑'}`).join('  ')), h('td', { class: 'num' }, x.zeff.toFixed(2))))))),
+        h('p', { class: 'hint-text' }, 'Real orbitals are clouds of probability, computed here from the hydrogen-like Schrödinger solutions with effective nuclear charges (Slater\'s rules). s orbitals are spheres, p are dumbbells, d are four-leaf clovers and f are more complex. "Phase" shows the sign of the wavefunction: nodes are where it changes colour. Drag to rotate, scroll or pinch to zoom where you point.'));
+    };
+    const setMode = m => { mode.m = m; storeSet('pt.atomMode', m); render(); };
+    isoSel.onchange = () => { const a = +isoSel.value; iso = el.isotopes.find(i => i.a === a && !i.iso); render(); };
+    render();
     const cfg = (el.configS || '').replace(/([spdf])(\d+)/g, '$1<sup>$2</sup>');
     const valence = el.shells?.[el.shells.length - 1];
     this.body.append(
-      h('div', { class: 'field' }, h('label', { for: 'atom-iso' }, 'Isotope shown'), isoSel),
       h('div', { class: 'sec' }, h('h3', {}, 'Electron configuration'), h('div', { class: 'cfg', html: cfg }), h('div', { class: 'cfg small muted', html: (el.config || '').replace(/([spdf])(\d+)/g, '$1<sup>$2</sup>') })),
       h('div', { class: 'sec' }, h('h3', {}, 'Electrons per shell'), h('div', { class: 'shells' }, (el.shells || []).map((n, i) => h('span', {}, `${'KLMNOPQ'[i]}: ${n}`))),
-        h('p', { class: 'hint-text' }, `${valence} electron${valence === 1 ? '' : 's'} in the outer shell. This is a Bohr-style picture; real electrons are fuzzy orbitals. Drag to rotate, pinch or scroll to zoom. Nucleus not to scale: it is really about 100,000 times smaller than the atom.`)));
+        h('p', { class: 'hint-text' }, `${valence} electron${valence === 1 ? '' : 's'} in the outer shell. In the planetary model the nucleus is not to scale: it is really about 100,000 times smaller than the atom.`)));
   }
 
   // ---------- Properties ----------
@@ -268,16 +294,16 @@ export function lightbox(src, caption) {
 function drawPhase(cv, el) {
   const ctx = cv.getContext('2d'); const { w, h: H } = fitCanvas(cv, ctx);
   const x = T => 10 + (Math.log10(Math.max(T, 1)) / 4) * (w - 20);
-  ctx.fillStyle = '#030409'; ctx.fillRect(0, 0, w, H);
+  ctx.fillStyle = SCREEN(); ctx.fillRect(0, 0, w, H);
   const y = 40, bh = 26;
-  const seg = (a, b, c, t) => { ctx.fillStyle = c; ctx.fillRect(x(a), y, Math.max(1, x(b) - x(a)), bh); if (x(b) - x(a) > 40) { ctx.fillStyle = '#0b0d1c'; ctx.font = '600 11px "IBM Plex Sans", sans-serif'; ctx.fillText(t, x(a) + 6, y + 17); } };
-  if (el.melt == null) { ctx.fillStyle = '#8f97ba'; ctx.font = '12px "IBM Plex Sans", sans-serif'; ctx.fillText('Melting and boiling points unknown', 12, y + 17); }
+  const seg = (a, b, c, t) => { ctx.fillStyle = c; ctx.fillRect(x(a), y, Math.max(1, x(b) - x(a)), bh); if (x(b) - x(a) > 40) { ctx.fillStyle = '#0b0d1c'; ctx.font = '600 11px "Source Sans 3", system-ui, sans-serif'; ctx.fillText(t, x(a) + 6, y + 17); } };
+  if (el.melt == null) { ctx.fillStyle = '#8f97ba'; ctx.font = '12px "Source Sans 3", system-ui, sans-serif'; ctx.fillText('Melting and boiling points unknown', 12, y + 17); }
   else {
     seg(1, el.melt, '#8fb3ff', 'solid');
     if (el.boil) { seg(el.melt, el.boil, '#4fe0c0', 'liquid'); seg(el.boil, 10000, '#ffb35c', 'gas'); }
     else seg(el.melt, 10000, 'rgba(79,224,192,.4)', 'liquid →');
   }
-  ctx.font = '10px "IBM Plex Mono", monospace'; ctx.fillStyle = '#8f97ba'; ctx.textAlign = 'center';
+  ctx.font = '10px "Source Sans 3", system-ui, sans-serif'; ctx.fillStyle = '#8f97ba'; ctx.textAlign = 'center';
   for (const T of [1, 10, 100, 1000, 10000]) ctx.fillText(T + ' K', Math.min(w - 20, Math.max(16, x(T))), H - 8);
   for (const [T, l] of [[293, 'room'], [373, 'water boils'], [5778, 'Sun']]) {
     ctx.strokeStyle = 'rgba(255,210,122,.8)'; ctx.beginPath(); ctx.moveTo(x(T), y - 8); ctx.lineTo(x(T), y + bh + 6); ctx.stroke();
@@ -298,7 +324,7 @@ function drawSpectrum(cv, lines, absorb) {
     ctx.fillRect(x(l) - 1.2, 0, 2.4, H - 16);
     ctx.globalAlpha = 1;
   }
-  ctx.fillStyle = '#8f97ba'; ctx.font = '10px "IBM Plex Mono", monospace';
+  ctx.fillStyle = '#8f97ba'; ctx.font = '10px "Source Sans 3", system-ui, sans-serif';
   for (const l of [400, 450, 500, 550, 600, 650, 700]) ctx.fillText(l + ' nm', x(l) - 14, H - 4);
 }
 

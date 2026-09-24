@@ -5,11 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Stardust Periodic Table</title>
 <meta name="description" content="An interactive 3D periodic table and nuclear physics lab: cosmic origins, isotopes, half-lives, fusion, fission and a particle collider.">
-<meta name="theme-color" content="#06070f">
+<meta name="theme-color" content="#000000">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Source+Sans+3:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
 <link rel="stylesheet" href="css/style.css">
+<script>try{var t=localStorage.getItem("pt.theme");if(t)document.documentElement.dataset.theme=JSON.parse(t);}catch(e){}</script>
 </head>
 <body>
 <div id="stage" aria-label="3D periodic table">
@@ -29,12 +30,14 @@
     <button data-view="fusion">Fusion</button>
     <button data-view="fission">Fission</button>
     <button data-view="collider">Collider</button>
+    <button data-view="body">Human Body</button>
     <button data-view="quiz">Quiz</button>
   </nav>
   <div class="search">
     <input id="search" type="search" placeholder="Search: gold, Fe, 92…" autocomplete="off" aria-label="Search elements">
     <div id="search-results" hidden></div>
   </div>
+  <button class="icon-btn" id="settings-btn" title="Theme and background" aria-label="Theme and background" aria-expanded="false">◐</button>
 </header>
 
 <aside id="dock" aria-label="Table controls">
@@ -54,8 +57,8 @@
     <div class="ctl">
       <label for="colorby">Colour by</label>
       <select id="colorby">
-        <option value="category">Category</option>
         <option value="origin">Cosmic origin</option>
+        <option value="category">Category</option>
         <option value="state">State at temperature</option>
         <option value="halflife">Longest half-life</option>
         <option value="abund">Abundance in the Solar System</option>
@@ -82,6 +85,12 @@
   </div>
 </aside>
 
+<div id="settings" hidden>
+  <h3>Appearance</h3>
+  <div class="field"><label>Theme</label><div class="seg" id="theme-seg"><button data-theme="dark">Pitch dark</button><button data-theme="bookish">Bookish</button><button data-theme="light">Light</button></div></div>
+  <div class="field"><label>Background</label><div class="seg" id="bg-seg"><button data-bg="stars">Stars</button><button data-bg="nebula">Nebula</button><button data-bg="plain">Plain</button></div></div>
+  <label class="row small" for="motion-toggle"><input type="checkbox" id="motion-toggle" checked> Animated background</label>
+</div>
 <div id="legend" aria-live="polite"></div>
 <div id="tooltip" role="tooltip" hidden></div>
 <section id="panel" aria-label="Element details" hidden></section>
@@ -92,11 +101,13 @@
   <section class="view" id="view-fusion" hidden></section>
   <section class="view" id="view-fission" hidden></section>
   <section class="view" id="view-collider" hidden></section>
+  <section class="view" id="view-body" hidden></section>
 </main>
 
 <div id="quiz-hud" hidden></div>
 <div id="compare" hidden></div>
 <div id="lightbox" hidden></div>
+<div id="chooser" hidden></div>
 
 <div id="loader">
   <div class="loader-inner">

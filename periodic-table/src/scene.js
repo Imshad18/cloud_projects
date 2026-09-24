@@ -31,7 +31,7 @@ export class TableScene {
     document.getElementById('css3d').append(this.css.domElement);
 
     this.controls = new OrbitControls(this.camera, this.css.domElement);
-    Object.assign(this.controls, { enableDamping: true, dampingFactor: 0.08, rotateSpeed: 0.5, zoomSpeed: 0.9, minDistance: 300, maxDistance: 12000, screenSpacePanning: true });
+    Object.assign(this.controls, { zoomToCursor: true, enableDamping: true, dampingFactor: 0.08, rotateSpeed: 0.5, zoomSpeed: 0.9, minDistance: 300, maxDistance: 12000, screenSpacePanning: true });
     this.controls.addEventListener('change', () => { this.cssDirty = true; });
 
     this.buildStars();
@@ -67,12 +67,12 @@ export class TableScene {
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.setAttribute('size', new THREE.BufferAttribute(size, 1));
     this.starMat = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 }, uScale: { value: this.gl.getPixelRatio() } },
+      uniforms: { uTime: { value: 0 }, uScale: { value: this.gl.getPixelRatio() }, uInk: { value: new THREE.Color(1, 1, 1) }, uLight: { value: 0 } },
       vertexShader: `attribute float size; attribute vec3 color; varying vec3 vC; varying float vT; uniform float uTime; uniform float uScale;
         void main(){ vC=color; vec4 mv=modelViewMatrix*vec4(position,1.0);
         vT=0.65+0.35*sin(uTime*1.5+position.x*0.013+position.y*0.007);
         gl_PointSize=size*uScale*2.0; gl_Position=projectionMatrix*mv; }`,
-      fragmentShader: `varying vec3 vC; varying float vT; void main(){ float d=length(gl_PointCoord-0.5); float a=smoothstep(0.5,0.0,d); gl_FragColor=vec4(vC*vT, a*vT); }`,
+      fragmentShader: `varying vec3 vC; varying float vT; uniform vec3 uInk; uniform float uLight; void main(){ float d=length(gl_PointCoord-0.5); float a=smoothstep(0.5,0.0,d); vec3 c=mix(vC*vT, uInk, uLight); gl_FragColor=vec4(c, a*vT*(1.0-0.55*uLight)); }`,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     });
     this.stars = new THREE.Points(g, this.starMat);
@@ -80,10 +80,10 @@ export class TableScene {
 
     // Nebula clouds from soft canvas textures.
     this.nebulae = new THREE.Group();
-    const cols = ['#5b3cc4', '#c23f8b', '#2a6fdb', '#ff7a3d', '#3aa6a0'];
+    const cols = ['#7a3fb0', '#b8406e', '#d9772f', '#6b3a8f', '#a8552a'];
     for (let i = 0; i < 9; i++) {
       const tex = this.cloudTexture(cols[i % cols.length]);
-      const m = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false });
+      const m = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false });
       const s = new THREE.Sprite(m);
       const r = 9000, th = Math.random() * Math.PI * 2, ph = Math.PI / 2 + (Math.random() - 0.5) * 1.6;
       s.position.set(r * Math.sin(ph) * Math.cos(th), r * Math.cos(ph), r * Math.sin(ph) * Math.sin(th) - 3000);
@@ -329,6 +329,21 @@ export class TableScene {
     t.classList.remove(cls); void t.offsetWidth; t.classList.add(cls);
     setTimeout(() => t.classList.remove(cls), 1100);
   }
+  // Theme: 'dark' | 'bookish' | 'light'. Background: 'stars' | 'nebula' | 'plain'.
+  setAppearance({ theme = 'dark', bg = 'stars', motion = true } = {}) {
+    const ground = getComputedStyle(document.documentElement).getPropertyValue('--ground').trim() || '#000';
+    this.gl.setClearColor(new THREE.Color(ground), 1);
+    const light = theme !== 'dark';
+    this.stars.visible = bg !== 'plain';
+    this.nebulae.visible = bg === 'nebula';
+    this.starMat.uniforms.uLight.value = light ? 1 : 0;
+    this.starMat.uniforms.uInk.value.set(theme === 'bookish' ? '#6e5d46' : '#5b6474');
+    this.starMat.blending = light ? THREE.NormalBlending : THREE.AdditiveBlending;
+    this.starMat.needsUpdate = true;
+    for (const n of this.nebulae.children) { n.material.blending = light ? THREE.NormalBlending : THREE.AdditiveBlending; n.material.opacity = light ? 0.1 : 0.22; n.material.needsUpdate = true; }
+    this.motion = motion;
+    this.cssDirty = true;
+  }
   setActive(on) {
     this.active = on;
     document.getElementById('stage').style.visibility = on ? '' : 'hidden';
@@ -376,8 +391,7 @@ export class TableScene {
       this.burstActive = any;
     }
     this.starMat.uniforms.uTime.value = now;
-    this.stars.rotation.y += dt * 0.004;
-    this.nebulae.rotation.y += dt * 0.002;
+    if (this.motion !== false) { this.stars.rotation.y += dt * 0.004; this.nebulae.rotation.y += dt * 0.002; }
     this.gl.render(this.bg, this.camera);
     if (this.cssDirty) { this.css.render(this.scene, this.camera); this.cssDirty = false; }
   }

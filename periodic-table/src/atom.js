@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { sampleAtom, L_COLORS } from './orbitals.js';
 
 // One shared WebGL viewer, re-attached to whichever panel shows it.
 let viewer = null;
@@ -18,7 +19,7 @@ class AtomViewer {
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
     this.camera.position.set(0, 6, 22);
     this.controls = new OrbitControls(this.camera, this.canvas);
-    Object.assign(this.controls, { enableDamping: true, autoRotate: true, autoRotateSpeed: 0.8, enablePan: false, minDistance: 3, maxDistance: 80 });
+    Object.assign(this.controls, { zoomToCursor: true, enableDamping: true, autoRotate: true, autoRotateSpeed: 0.8, enablePan: false, minDistance: 3, maxDistance: 80 });
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.5));
     const d = new THREE.DirectionalLight(0xffffff, 2.2); d.position.set(5, 8, 10); this.scene.add(d);
     const p = new THREE.PointLight(0xffd27a, 30, 30); this.scene.add(p);
@@ -45,6 +46,45 @@ class AtomViewer {
     const r = this.container.getBoundingClientRect();
     this.renderer.setSize(r.width, r.height, false);
     this.camera.aspect = r.width / r.height || 1; this.camera.updateProjectionMatrix();
+  }
+  // Quantum mode: probability clouds for every occupied orbital.
+  showOrbitals(el, { hidden = new Set(), color = 'type' } = {}) {
+    this.group.clear(); this.electrons = [];
+    if (this.cacheEl !== el) { this.cache = sampleAtom(el); this.cacheEl = el; }
+    const subs = this.cache;
+    const outer = Math.max(...subs.map(s => s.rmean)) || 1;
+    const scale = 7 / (outer * 1.6);
+    const dot = this.dotTex || (this.dotTex = this.makeDot());
+    for (const s of subs) {
+      if (hidden.has(s.name)) continue;
+      s.orbitals.forEach((o, k) => {
+        const n = o.sign.length, pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+        const base = new THREE.Color(L_COLORS[s.l]).offsetHSL((k - (s.orbitals.length - 1) / 2) * 0.05, 0, 0);
+        const plus = new THREE.Color('#ff7a59'), minus = new THREE.Color('#4da3ff');
+        for (let i = 0; i < n; i++) {
+          pos[i * 3] = o.points[i * 3] * scale; pos[i * 3 + 1] = o.points[i * 3 + 1] * scale; pos[i * 3 + 2] = o.points[i * 3 + 2] * scale;
+          const c = color === 'phase' ? (o.sign[i] > 0 ? plus : minus) : base;
+          col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        const m = new THREE.PointsMaterial({ size: 0.09, vertexColors: true, transparent: true, opacity: 0.75, map: dot, blending: THREE.AdditiveBlending, depthWrite: false });
+        this.group.add(new THREE.Points(g, m));
+      });
+    }
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffe0a0 }));
+    this.group.add(core);
+    this.camera.position.setLength(18);
+    this.controls.update();
+    return subs;
+  }
+  makeDot() {
+    const c = document.createElement('canvas'); c.width = c.height = 32;
+    const x = c.getContext('2d'), g = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+    g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.5, 'rgba(255,255,255,.35)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 32, 32);
+    return new THREE.CanvasTexture(c);
   }
   show(el, iso) {
     this.group.clear(); this.electrons = [];

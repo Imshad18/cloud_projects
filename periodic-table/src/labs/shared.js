@@ -1,4 +1,4 @@
-import { h, fitCanvas, clamp, rand } from '../util.js';
+import { h, fitCanvas, clamp, rand, SCREEN } from '../util.js';
 import { NUCS, byZ, findNuclide, ELEMENTS } from '../store.js';
 import { bePerNucleon, resolve } from '../nuclear.js';
 import { nucleus } from '../originAnim.js';
@@ -16,10 +16,10 @@ export function bindingCurve({ height = 280 } = {}) {
   const X = (a, w) => 40 + (a / 260) * (w - 54), Y = (b, H) => 14 + (1 - b / 9.2) * (H - 44);
   function draw() {
     const { w, h: H } = fitCanvas(cv, ctx);
-    ctx.fillStyle = '#030409'; ctx.fillRect(0, 0, w, H);
+    ctx.fillStyle = SCREEN(); ctx.fillRect(0, 0, w, H);
     ctx.fillStyle = 'rgba(92,200,240,.07)'; ctx.fillRect(X(0, w), 0, X(56, w) - X(0, w), H - 30);
     ctx.fillStyle = 'rgba(124,242,154,.07)'; ctx.fillRect(X(56, w), 0, X(260, w) - X(56, w), H - 30);
-    ctx.font = '11px "IBM Plex Mono", monospace'; ctx.fillStyle = '#8fdcff'; ctx.fillText('← fusion releases energy', X(62, w) - 170 < 44 ? 46 : X(8, w), Y(2.2, H));
+    ctx.font = '11px "Source Sans 3", system-ui, sans-serif'; ctx.fillStyle = '#8fdcff'; ctx.fillText('← fusion releases energy', X(62, w) - 170 < 44 ? 46 : X(8, w), Y(2.2, H));
     ctx.fillStyle = '#7cf29a'; ctx.textAlign = 'right'; ctx.fillText('fission releases energy →', X(250, w), Y(6.9, H)); ctx.textAlign = 'left';
     ctx.strokeStyle = 'rgba(170,185,255,.12)'; ctx.fillStyle = '#8f97ba';
     for (let b = 0; b <= 9; b += 1) { ctx.beginPath(); ctx.moveTo(X(0, w), Y(b, H)); ctx.lineTo(X(260, w), Y(b, H)); ctx.stroke(); if (b % 2 === 1 || b === 0) ctx.fillText(String(b), 12, Y(b, H) + 4); }
@@ -35,11 +35,11 @@ export function bindingCurve({ height = 280 } = {}) {
       const r = findNuclide(m.label); if (!r || r.a < 2) continue;
       const x = X(r.a, w), y = Y(bePerNucleon(r), H);
       ctx.strokeStyle = m.color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.stroke();
-      ctx.fillStyle = m.color; ctx.font = '600 11px "IBM Plex Mono", monospace'; ctx.fillText(r.label, x + 9, y + 14);
+      ctx.fillStyle = m.color; ctx.font = '600 11px "Source Sans 3", system-ui, sans-serif'; ctx.fillText(r.label, x + 9, y + 14);
     }
     if (hover) {
       const x = X(hover.a, w), y = Y(hover.b, H), t = `${hover.r.label}: ${hover.b.toFixed(3)} MeV`;
-      ctx.font = '12px "IBM Plex Mono", monospace'; const tw = ctx.measureText(t).width + 12;
+      ctx.font = '12px "Source Sans 3", system-ui, sans-serif'; const tw = ctx.measureText(t).width + 12;
       const bx = clamp(x + 10, 4, w - tw - 4);
       ctx.fillStyle = 'rgba(14,17,34,.95)'; ctx.fillRect(bx, y - 30, tw, 22); ctx.fillStyle = '#e9ecf8'; ctx.fillText(t, bx + 6, y - 15);
     }
@@ -73,13 +73,13 @@ export function reactionAnim({ height = 240 } = {}) {
     if (n === 1) { const g = ctx.createRadialGradient(x - 2, y - 2, 1, x, y, S); g.addColorStop(0, '#fff'); g.addColorStop(0.4, z ? '#ff5d5d' : '#8aa4ff'); g.addColorStop(1, z ? 'rgba(255,93,93,.5)' : 'rgba(138,164,255,.5)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, S, 0, 7); ctx.fill(); return; }
     nucleus(ctx, x, y, n, S, z * 31 + a);
   }
-  function label(t0, x, y) { ctx.font = '600 12px "IBM Plex Mono", monospace'; ctx.fillStyle = '#e9ecf8'; ctx.textAlign = 'center'; ctx.fillText(t0, x, y); ctx.textAlign = 'left'; }
+  function label(t0, x, y) { ctx.font = '600 12px "Source Sans 3", system-ui, sans-serif'; ctx.fillStyle = '#e9ecf8'; ctx.textAlign = 'center'; ctx.fillText(t0, x, y); ctx.textAlign = 'left'; }
   function frame(ts) {
     raf = requestAnimationFrame(frame);
     if (!cv.offsetParent) return;
     const dt = Math.min(0.05, (ts - (last || ts)) / 1000); last = ts; t += dt;
     const { w, h: H } = fitCanvas(cv, ctx);
-    ctx.fillStyle = '#030409'; ctx.fillRect(0, 0, w, H);
+    ctx.fillStyle = SCREEN(); ctx.fillRect(0, 0, w, H);
     const S = Math.min(w, H) * 0.028, cx = w / 2, cy = H / 2, T = 4, k = t % T;
     if (k < 1.3) {
       const f = k / 1.3, e = f * f;
@@ -99,7 +99,7 @@ export function reactionAnim({ height = 240 } = {}) {
         const d = Math.min(w * 0.45, f * sp * w * 0.22);
         drawParticle(p, cx + Math.cos(ang) * d, cy + Math.sin(ang) * d * 0.6, S);
       });
-      if (f > 0.4) { ctx.font = '600 16px "IBM Plex Mono", monospace'; ctx.textAlign = 'center'; ctx.fillStyle = q >= 0 ? '#ffd27a' : '#ff6b7d'; ctx.fillText(`${q >= 0 ? '+' : ''}${q.toFixed(2)} MeV`, cx, H - 16); ctx.textAlign = 'left'; }
+      if (f > 0.4) { ctx.font = '600 16px "Source Sans 3", system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = q >= 0 ? '#ffd27a' : '#ff6b7d'; ctx.fillText(`${q >= 0 ? '+' : ''}${q.toFixed(2)} MeV`, cx, H - 16); ctx.textAlign = 'left'; }
     }
   }
   return {

@@ -6,7 +6,7 @@ export function h(tag, attrs = {}, ...kids) {
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v == null || v === false) continue;
     if (k === 'class') e.className = v;
-    else if (k === 'style' && typeof v === 'object') Object.assign(e.style, v);
+    else if (k === 'style' && typeof v === 'object') { for (const [sk, sv] of Object.entries(v)) { if (sk.startsWith('--')) e.style.setProperty(sk, sv); else e.style[sk] = sv; } }
     else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
     else if (k === 'html') e.innerHTML = v;
     else e.setAttribute(k, v === true ? '' : v);
@@ -131,3 +131,13 @@ export function toast(msg, ms = 2400) {
   requestAnimationFrame(() => t.classList.add('show'));
   setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, ms);
 }
+
+// Theme-aware colours for canvases. Screens stay dark in every theme, tinted to match it.
+let _screen = null;
+export function SCREEN() {
+  if (_screen == null) _screen = getComputedStyle(document.documentElement).getPropertyValue('--screen').trim() || '#050506';
+  return _screen;
+}
+export function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+export function themeChanged() { _screen = null; }
+export const FONT = '"Source Sans 3", system-ui, sans-serif';

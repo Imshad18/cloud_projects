@@ -1,5 +1,6 @@
 import { SOURCES } from './data/origins.js';
-import { fitCanvas, rand, rgba } from './util.js';
+import { ELEMENTS, CATEGORIES } from './store.js';
+import { fitCanvas, rand, rgba, SCREEN } from './util.js';
 
 const TAU = Math.PI * 2;
 
@@ -14,9 +15,9 @@ function ball(ctx, x, y, r, color) {
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
 }
 function label(ctx, text, x, y, color = '#e9ecf8', size = 12, align = 'center') {
-  ctx.font = `500 ${size}px "IBM Plex Mono", monospace`;
+  ctx.font = `500 ${size}px "Source Sans 3", system-ui, sans-serif`;
   const maxW = ctx.canvas.clientWidth - 16;
-  while (align === 'center' && size > 8 && ctx.measureText(text).width > maxW) { size -= 1; ctx.font = `500 ${size}px "IBM Plex Mono", monospace`; }
+  while (align === 'center' && size > 8 && ctx.measureText(text).width > maxW) { size -= 1; ctx.font = `500 ${size}px "Source Sans 3", system-ui, sans-serif`; }
   ctx.textAlign = align; ctx.fillStyle = color; ctx.fillText(text, x, y);
 }
 // Small nucleus drawn as a cluster of protons and neutrons.
@@ -39,7 +40,47 @@ export class OriginAnim {
     this.raf = 0; this.last = 0;
     this.tick = this.tick.bind(this);
   }
-  set(src) { this.src = src; this.t = 0; this.parts = []; this.state = {}; }
+  set(src) {
+    this.src = src; this.t = 0; this.parts = []; this.state = {}; this.syms = []; this.seen = new Set();
+    // every element this factory makes, weighted by how much of it comes from here
+    this.forge = ELEMENTS.map(e => [e, (e.origin.find(o => o.src === src) || {}).pct || 0]).filter(x => x[1] > 0);
+    this.forgeW = this.forge.reduce((a, x) => a + x[1], 0);
+  }
+  // Emit element symbols from (x, y) at `rate` per second.
+  emit(x, y, rate, speed = 60, dt = 0.016) {
+    if (!this.forge.length) return;
+    this.acc = (this.acc || 0) + rate * dt;
+    while (this.acc >= 1) {
+      this.acc -= 1;
+      let r = Math.random() * this.forgeW, pick = this.forge[0];
+      // cycle through elements not yet shown so every one appears
+      const unseen = this.forge.filter(f => !this.seen.has(f[0].sym));
+      if (unseen.length && Math.random() < 0.6) pick = unseen[(Math.random() * unseen.length) | 0];
+      else for (const f of this.forge) { r -= f[1]; if (r <= 0) { pick = f; break; } }
+      this.seen.add(pick[0].sym);
+      const a = rand(0, Math.PI * 2), v = speed * rand(0.5, 1.2);
+      this.syms.push({ e: pick[0], x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1 });
+    }
+  }
+  drawSyms(ctx, w, h, dt) {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.textAlign = 'center';
+    for (const p of this.syms) {
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.99; p.vy *= 0.99; p.life -= dt * 0.28;
+      const a = Math.max(0, Math.min(1, p.life * 1.6));
+      const c = CATEGORIES[p.e.cat].color;
+      ctx.font = `700 ${Math.round(13 + p.life * 5)}px Fraunces, Georgia, serif`;
+      ctx.shadowColor = c; ctx.shadowBlur = 10; ctx.globalAlpha = a;
+      ctx.fillStyle = '#ffffff'; ctx.fillText(p.e.sym, p.x, p.y);
+      ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    }
+    this.syms = this.syms.filter(p => p.life > 0 && p.x > -30 && p.x < w + 30 && p.y > -30 && p.y < h + 30);
+    ctx.textAlign = 'left';
+    // counter of elements shown
+    ctx.font = `600 12px ${'"Source Sans 3", system-ui, sans-serif'}`; ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.textAlign = 'right';
+    ctx.fillText(`${this.seen.size} of ${this.forge.length} elements made here`, w - 10, 20);
+    ctx.textAlign = 'left';
+  }
   start() { if (!this.raf) { this.last = 0; this.raf = requestAnimationFrame(this.tick); } }
   stop() { cancelAnimationFrame(this.raf); this.raf = 0; }
   tick(ts) {
@@ -51,13 +92,15 @@ export class OriginAnim {
     const { w, h } = fitCanvas(this.c, this.ctx);
     const ctx = this.ctx;
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = '#030409'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = SCREEN(); ctx.fillRect(0, 0, w, h);
     for (const [sx, sy, sb] of this.stars) {
       ctx.fillStyle = `rgba(255,255,255,${0.15 + sb * 0.5 * (0.7 + 0.3 * Math.sin(this.t * 2 + sx * 50))})`;
       ctx.fillRect(sx * w, sy * h, sb > 0.8 ? 1.6 : 1, sb > 0.8 ? 1.6 : 1);
     }
     ctx.globalCompositeOperation = 'lighter';
+    this.dt = dt;
     this[this.src]?.(ctx, w, h, dt);
+    this.drawSyms(ctx, w, h, dt);
     ctx.globalCompositeOperation = 'source-over';
   }
 
@@ -76,6 +119,7 @@ export class OriginAnim {
       if (t > 3 && p.he) { ball(ctx, x - 2, y, 2.6, '#ff5d5d'); ball(ctx, x + 2, y, 2.6, '#8aa4ff'); ball(ctx, x, y - 2.5, 2.6, '#8aa4ff'); ball(ctx, x, y + 2.5, 2.6, '#ff5d5d'); }
       else glow(ctx, x, y, t > 3 ? 4 : 6, t > 3 ? '#8fd3ff' : col, 0.9);
     }
+    if (t > 3) this.emit(cx, cy, 3, S * 0.25, dt);
     const stage = t < 0.6 ? 't = 0: hot, dense beginning' : t < 2 ? 't = 1 s: protons and neutrons' : t < 3 ? 't = 3 min: fusion begins' : t < 6 ? 't = 20 min: 75% H, 25% He, trace Li' : '13.8 billion years ago';
     label(ctx, stage, cx, h - 16, '#cfe8ff');
     if (t > 3) { label(ctx, '● H', 16, 22, '#8fd3ff', 12, 'left'); label(ctx, '●● He', 16, 40, '#ffb0b0', 12, 'left'); }
@@ -107,6 +151,7 @@ export class OriginAnim {
         nucleus(ctx, x, y, n, S * 0.018, 3 + i);
         if (lab) label(ctx, lab, x, y - S * 0.07, '#e2d4ff', 13);
       });
+      if (k < 0.5) this.emit(cx, cy, 8, S * 0.3, this.dt);
       label(ctx, 'spallation: the nucleus shatters into Li, Be, B', cx - w * 0.1, h - 16, '#e2d4ff');
     }
   }
@@ -133,6 +178,7 @@ export class OriginAnim {
     const nx = cx + S * 0.15 * (1 - k), ny = cy - S * 0.08 * (1 - k);
     ball(ctx, nx, ny, 3.5, '#8aa4ff');
     label(ctx, 'n', nx + 8, ny - 6, '#b8c8ff', 11);
+    this.emit(cx, cy, 5, S * 0.3, this.dt);
     label(ctx, 's-process: one neutron every few years; Sr, Ba, Pb build up', cx, h - 16, '#ffd9a8');
   }
 
@@ -167,6 +213,7 @@ export class OriginAnim {
         ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(ang) * S * 0.2 * s, cy + Math.sin(ang) * S * 0.2 * s); ctx.stroke();
       }
       glow(ctx, cx, cy, 10, '#bfe6ff'); ball(ctx, cx, cy, 3, '#ffffff');
+      this.emit(cx, cy, k < 1.5 ? 22 : 4, S * 0.45, this.dt);
       label(ctx, 'core-collapse supernova → O, Mg, Si, Ca... and a neutron star', cx, h - 16, '#ffc9b8');
     }
   }
@@ -198,6 +245,7 @@ export class OriginAnim {
         const a = i * 2.39996, v = 0.5 + ((i * 37) % 50) / 100;
         glow(ctx, wx + Math.cos(a) * R * v, cy + Math.sin(a) * R * v, 5, i % 3 ? '#fff08a' : '#ffffff', Math.max(0, 1 - k / 2.5));
       }
+      this.emit(wx, cy, k < 1.2 ? 16 : 3, S * 0.45, this.dt);
       label(ctx, 'Type Ia supernova: nickel-56 → cobalt → iron', w / 2, h - 16, '#fff6c2');
     }
   }
@@ -231,8 +279,8 @@ export class OriginAnim {
         glow(ctx, x, y, p.g ? 5 : 4, p.g ? '#ffd27a' : '#ff5fd2', (p.g ? tw : 0.7) * Math.max(0.1, 1 - k / 4));
       }
       glow(ctx, cx, cy, 12, '#bfe6ff');
-      label(ctx, 'kilonova: r-process forges gold, platinum, uranium', cx, h - 16, '#ffd0ec');
-      if (k > 0.8) { label(ctx, 'Au', cx + R * 0.5, cy - R * 0.3, '#ffd27a', 14); label(ctx, 'Pt', cx - R * 0.55, cy + R * 0.2, '#e9ecf8', 14); label(ctx, 'U', cx + R * 0.1, cy + R * 0.55, '#7cf29a', 14); }
+      this.emit(cx, cy, k < 2 ? 34 : 8, S * 0.42, this.dt);
+      label(ctx, 'kilonova: the r-process forges gold, platinum, europium, uranium and 47 more', cx, h - 16, '#ffd0ec');
     }
   }
 
@@ -256,6 +304,7 @@ export class OriginAnim {
     nucleus(ctx, tx, cy, 20, S * 0.014, 11);
     label(ctx, 'target', tx, cy + S * 0.12, '#a6b0c8', 11);
     this.state.made = (this.state.made || 0) + (k < 0.02 ? 1 : 0);
+    if (k > 2.5 && k < 2.6) this.emit(cx + R + S * 0.35, cy, 40, S * 0.2, this.dt);
     label(ctx, 'beams of ions fused with heavy targets, one atom at a time', w / 2, h - 16, '#dfe4f2');
   }
 
@@ -272,15 +321,15 @@ export class OriginAnim {
       else { glow(ctx, cx + d, cy + d * 0.3, 7, '#5cc8f0'); label(ctx, 'β⁻', cx + d + 14, cy + d * 0.3 - 8, '#5cc8f0', 13); }
     }
     ctx.globalCompositeOperation = 'source-over';
-    const x0 = 14; let y = 20;
-    ctx.font = '500 11px "IBM Plex Mono", monospace'; ctx.textAlign = 'left';
+    let y = 42;
+    ctx.font = '500 11px "Source Sans 3", system-ui, sans-serif'; ctx.textAlign = 'left';
     chain.forEach((c, i) => {
       if (y > h - 10) return;
       ctx.fillStyle = i === step ? '#7cf29a' : i < step ? 'rgba(233,236,248,.35)' : 'rgba(233,236,248,.6)';
       ctx.fillText((i === step ? '▶ ' : '  ') + c, w - 110, y); y += Math.min(15, (h - 20) / chain.length);
     });
+    this.emit(cx, cy, 2, S * 0.2, this.dt);
     label(ctx, chain[step], cx, cy + S * 0.16, '#7cf29a', 14);
-    void x0;
   }
 }
 

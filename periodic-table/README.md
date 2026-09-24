@@ -6,8 +6,11 @@ Open `index.html` in any modern browser (desktop or phone). No install or server
 
 ## What's inside
 
+### Look and feel
+- Three themes: **Pitch dark**, **Bookish** (paper and serif) and **Light**, plus Stars / Nebula / Plain backgrounds (◐ button, top right).
+
 ### 3D periodic table
-- All 118 elements as 3D tiles over a live starfield. Drag to orbit, pinch or scroll to zoom, tap an element.
+- Opens as the classic table coloured by **cosmic origin**. All 118 elements as 3D tiles over a live starfield. Drag to orbit, pinch or scroll to zoom, tap an element.
 - Six shapes: **Table, Sphere, Helix, Grid, By origin** (clustered by cosmic birthplace) and **Discovery** (a timeline by year).
 - Colour by category, **cosmic origin**, state at any temperature (0–6000 K slider), longest half-life, Solar System abundance, electronegativity, mass, density, melting/boiling point, ionization energy, discovery year, block, or share of the human body.
 - **Time machine** slider: watch the table fill in from antiquity to today.
@@ -18,7 +21,7 @@ Open `index.html` in any modern browser (desktop or phone). No install or server
 - **Overview:** real photo of the element plus a gallery (live from Wikimedia Commons), live Wikipedia summary, discovery, name origin, uses, read-aloud.
 - **Origin:** animated scene of the cosmic factory that made it (Big Bang, cosmic rays, dying low-mass stars, exploding massive stars, exploding white dwarfs, merging neutron stars/kilonovae, human-made, radioactive decay), percentages, step-by-step journey and element-specific stories.
 - **Isotopes:** every isotope with natural abundance, half-life, decay modes and binding energy.
-- **Atom:** 3D model with the real number of protons and neutrons, orbiting electrons per shell, switchable isotopes, electron configuration.
+- **Atom:** a planetary 3D model with the real number of protons and neutrons, or **real quantum orbitals** (probability clouds from hydrogen-like wavefunctions with Slater effective charges), with phase colouring and per-subshell toggles.
 - **Properties:** ranked bars against the whole table and a solid/liquid/gas temperature chart.
 - **Spectrum:** emission and absorption lines, flame-test colour, and the spectrum turned into sound.
 - Compare any two elements side by side.
@@ -26,9 +29,10 @@ Open `index.html` in any modern browser (desktop or phone). No install or server
 ### Labs
 - **Cosmic Origins:** the eight element factories, animated, with every element each one made, a cosmic timeline from the Big Bang to today, and what your body is made of by birthplace.
 - **Isotope Lab:** zoomable chart of all 3,351 known nuclides (half-life, decay mode, binding energy or abundance), magic numbers, decay chains to stability, a Monte Carlo half-life simulator and a radiometric dating calculator.
-- **Fusion Lab:** build any reaction from two nuclei; Q-values from real atomic masses, Coulomb barrier, energy per kg vs petrol and TNT, famous reactions (D-T, p-p chain, triple-alpha, CNO, carbon to silicon burning), the binding energy curve, stellar burning stages and a Lawson-criterion calculator.
-- **Fission Lab:** choose fuel (U-235, Pu-239, U-233, Pu-241, U-238, Th-232, Cf-252) and the exact split; energy from masses, fragment decay chains, fission-yield curve, and a live **chain-reaction reactor** with enrichment, control rods, moderator, SCRAM and plutonium breeding.
-- **Particle Collider:** pick any projectile (electron, positron, proton, antiproton, neutron or any nucleus) and any target, set speed and machine length, choose linac or ring and fixed-target or head-on. Get exact relativistic data (γ, energy, momentum, wavelength, time dilation), what the machine needs (voltage gradient or magnet field, laps, synchrotron losses) and the collision outcome: Rutherford scattering, tunneling fusion, fusion-evaporation (superheavy elements), neutron capture and activation, fission, fragmentation, spallation, antimatter annihilation, deep inelastic scattering, W/Z/Higgs/top production or quark-gluon plasma, with a detector event display. Includes presets such as LHC, RHIC, LEP, SLAC 1968, Rutherford 1909, Cockcroft-Walton 1932 and the tennessine discovery.
+- **Fusion Lab:** collide any two nuclei of any element at any energy, from 1 eV to ten times the Oh-My-God particle, with an animation of what physics predicts (tunnelling, fusion-evaporation, quasi-fission, supercritical fields for Z > 173, fragmentation, quark-gluon plasma), plus build any reaction from two nuclei; Q-values from real atomic masses, Coulomb barrier, energy per kg vs petrol and TNT, famous reactions (D-T, p-p chain, triple-alpha, CNO, carbon to silicon burning), the binding energy curve, stellar burning stages and a Lawson-criterion calculator.
+- **Fission Lab:** split any nucleus, spontaneously or with a neutron of any energy up to beyond the OMG particle, choosing the exact split (liquid-drop estimates for unobserved nuclei); energy from masses, fragment decay chains, fission-yield curve, and a live **chain-reaction reactor** with enrichment, control rods, moderator, SCRAM and plutonium breeding.
+- **Particle Collider:** pick any projectile (electron, positron, proton, antiproton, neutron or any nucleus) and any target, set speed and machine length, choose linac or ring and fixed-target or head-on. Get exact relativistic data (γ, energy, momentum, wavelength, time dilation), what the machine needs (voltage gradient or magnet field, laps, synchrotron losses) and the collision outcome: Rutherford scattering, tunneling fusion, fusion-evaporation (superheavy elements), neutron capture and activation, fission, fragmentation, spallation, antimatter annihilation, deep inelastic scattering, W/Z/Higgs/top production or quark-gluon plasma, with an event display in 2D (end and side views) and **3D** (helical tracks in a 3.8 T field). Rates come from measured LHC cross sections (TOTEM, ATLAS, CMS, ALICE, PDG), so you can record single collisions, choose a process (Higgs → γγ, H → 4ℓ, top pairs, tetraquarks, pentaquarks…) or run millions of collisions and whole LHC datasets (1, 139, 3000 fb⁻¹) and watch the Higgs bump appear in LHC-style plots. Includes presets such as LHC, RHIC, LEP, SLAC 1968, Rutherford 1909, Cockcroft-Walton 1932 and the tennessine discovery.
+- **Human Body:** a 3D figure made of the atoms you contain, placed where each element lives (calcium in bones, iron in blood, iodine in the thyroid), coloured by element, cosmic origin or body part, with a button that sends every atom back to the star that made it.
 - **Quiz:** timed questions answered by tapping the 3D table, with streaks and a saved best score.
 
 Keyboard: `/` search, `1`–`6` shapes, arrow keys move between elements, `Esc` closes.

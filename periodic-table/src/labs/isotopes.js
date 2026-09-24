@@ -1,5 +1,6 @@
-import { h, fmt, fmtTime, fitCanvas, ramp, RAMP_CSS, clamp, sci } from '../util.js';
+import { h, fmt, fmtTime, fitCanvas, ramp, RAMP_CSS, clamp, sci, SCREEN } from '../util.js';
 import { NUCS, byZ, findNuclide } from '../store.js';
+import { nuclideButton } from '../chooser.js';
 import { bePerNucleon, bindingEnergy, decayChain, modeColor, modeText, MODE_INFO, nuclideLabelHTML, U } from '../nuclear.js';
 
 const MAGIC = [2, 8, 20, 28, 50, 82, 126];
@@ -42,10 +43,10 @@ export function buildIsotopes(root, { openElement }) {
 
   function draw() {
     const { w, h: H } = fitCanvas(canvas, ctx);
-    ctx.fillStyle = '#030409'; ctx.fillRect(0, 0, w, H);
+    ctx.fillStyle = SCREEN(); ctx.fillRect(0, 0, w, H);
     const s = view.s, col = MODES_VIEW[mode].color;
     // magic numbers
-    ctx.strokeStyle = 'rgba(255,210,122,.18)'; ctx.lineWidth = 1; ctx.font = '10px "IBM Plex Mono", monospace'; ctx.fillStyle = 'rgba(255,210,122,.55)';
+    ctx.strokeStyle = 'rgba(255,210,122,.18)'; ctx.lineWidth = 1; ctx.font = '10px "Source Sans 3", system-ui, sans-serif'; ctx.fillStyle = 'rgba(255,210,122,.55)';
     let lastX = -99, lastY = 1e9;
     for (const m of MAGIC) {
       const [x] = toScreen(m, 0); const [, y] = toScreen(0, m);
@@ -67,10 +68,10 @@ export function buildIsotopes(root, { openElement }) {
       for (const r of GROUND) {
         const [x, y] = toScreen(r.n, r.z);
         if (x < -s || y < -s || x > w || y > H) continue;
-        ctx.font = `600 ${Math.min(13, s * 0.3)}px "IBM Plex Sans", sans-serif`;
+        ctx.font = `600 ${Math.min(13, s * 0.3)}px "Source Sans 3", system-ui, sans-serif`;
         ctx.fillStyle = r.hl == null ? '#8f97ba' : '#0b0d1c';
         ctx.fillText(`${r.sym}${r.a}`, x + s / 2, y + s * 0.45);
-        if (s > 44 && r.hl != null) { ctx.font = `${Math.min(10, s * 0.2)}px "IBM Plex Mono", monospace`; ctx.fillText(r.hl === -1 ? 'stable' : fmtTime(r.hl).replace(' years', ' y').replace(' million', 'M').replace(' billion', 'G'), x + s / 2, y + s * 0.75); }
+        if (s > 44 && r.hl != null) { ctx.font = `${Math.min(10, s * 0.2)}px "Source Sans 3", system-ui, sans-serif`; ctx.fillText(r.hl === -1 ? 'stable' : fmtTime(r.hl).replace(' years', ' y').replace(' million', 'M').replace(' billion', 'G'), x + s / 2, y + s * 0.75); }
       }
       ctx.textAlign = 'left';
     }
@@ -88,12 +89,12 @@ export function buildIsotopes(root, { openElement }) {
     if (hover) {
       const [x, y] = toScreen(hover.n, hover.z);
       const t = `${hover.label}  ${hover.hl === -1 ? 'stable' : fmtTime(hover.hl)}`;
-      ctx.font = '12px "IBM Plex Mono", monospace'; const tw = ctx.measureText(t).width + 14;
+      ctx.font = '12px "Source Sans 3", system-ui, sans-serif'; const tw = ctx.measureText(t).width + 14;
       const bx = clamp(x + s + 8, 4, w - tw - 4), by = clamp(y - 30, 4, H - 28);
       ctx.fillStyle = 'rgba(14,17,34,.95)'; ctx.fillRect(bx, by, tw, 24); ctx.strokeStyle = 'rgba(170,185,255,.3)'; ctx.lineWidth = 1; ctx.strokeRect(bx, by, tw, 24);
       ctx.fillStyle = '#e9ecf8'; ctx.fillText(t, bx + 7, by + 16);
     }
-    ctx.fillStyle = '#8f97ba'; ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.fillStyle = '#8f97ba'; ctx.font = '11px "Source Sans 3", system-ui, sans-serif';
     ctx.fillText('neutrons (N) →', w - 120, H - 8);
     ctx.save(); ctx.translate(12, 120); ctx.rotate(-Math.PI / 2); ctx.fillText('protons (Z) →', 0, 0); ctx.restore();
   }
@@ -135,7 +136,7 @@ export function buildIsotopes(root, { openElement }) {
   }
 
   function select(r, zoom = false) {
-    sel = r.iso ? r : r; chain = decayChain(r);
+    sel = r; chain = decayChain(r); pickBtn?.set?.(r);
     renderInfo(); renderChain(); sim.set(r);
     if (zoom) focus(r); else draw();
   }
@@ -209,6 +210,7 @@ export function buildIsotopes(root, { openElement }) {
   });
   search.addEventListener('input', () => { search.style.borderColor = ''; });
 
+  const pickBtn = nuclideButton({ value: sel, title: 'Pick any nucleus', onPick: r => { if (typeof r !== 'string') select(r, true); } });
   const famous = ['H-3', 'C-14', 'K-40', 'Co-60', 'Sr-90', 'Tc-99m', 'I-131', 'Cs-137', 'Rn-222', 'Ra-226', 'U-235', 'U-238', 'Pu-239', 'Am-241', 'Bi-209', 'Fe-56'];
 
   root.append(h('div', { class: 'lab' },
@@ -217,7 +219,7 @@ export function buildIsotopes(root, { openElement }) {
       h('h1', {}, 'The chart of nuclides'),
       h('p', {}, `All ${GROUND.length.toLocaleString()} known nuclei, one square each: protons up, neutrons across. The pale line of stable nuclei is the valley of stability. Drag to pan, scroll or pinch to zoom, tap a square.`))),
     h('div', { class: 'row', style: { justifyContent: 'space-between' } }, modeTabs,
-      h('div', { class: 'row' }, h('div', { class: 'field', style: { width: '220px' } }, search), h('button', { class: 'btn', onclick: () => { fit(); draw(); } }, 'Reset view'))),
+      h('div', { class: 'row' }, h('div', { style: { width: '230px' } }, pickBtn.root), h('div', { class: 'field', style: { width: '190px' } }, search), h('button', { class: 'btn', onclick: () => { fit(); draw(); } }, 'Reset view'))),
     h('div', { class: 'grid2' },
       h('div', { class: 'stack' }, box, legend,
         h('div', { class: 'row small' }, h('span', { class: 'muted' }, 'Famous isotopes:'), famous.map(f => h('button', { class: 'el-chip', style: { '--c': '#ffd27a' }, onclick: () => select(findNuclide(f), true) }, h('b', {}, f))))),
@@ -273,7 +275,7 @@ export function buildIsotopes(root, { openElement }) {
     function drawSim() {
       const ok = r0 && r0.hl > 0;
       const c = cv.getContext('2d'); const { w, h: H } = fitCanvas(cv, c);
-      c.fillStyle = '#030409'; c.fillRect(0, 0, w, H);
+      c.fillStyle = SCREEN(); c.fillRect(0, 0, w, H);
       const cols = 20, s = Math.min(w, H) / cols;
       const d = chain[1]?.r;
       for (let i = 0; i < N; i++) {
@@ -282,9 +284,9 @@ export function buildIsotopes(root, { openElement }) {
         c.beginPath(); c.arc(x, y, s * (atoms[i] ? 0.22 : 0.36), 0, Math.PI * 2); c.fill();
       }
       const g = graph.getContext('2d'); const G = fitCanvas(graph, g);
-      g.fillStyle = '#030409'; g.fillRect(0, 0, G.w, G.h);
+      g.fillStyle = SCREEN(); g.fillRect(0, 0, G.w, G.h);
       const px = tt => 34 + (tt / 8) * (G.w - 44), py = n => 10 + (1 - n / N) * (G.h - 34);
-      g.strokeStyle = 'rgba(170,185,255,.12)'; g.fillStyle = '#8f97ba'; g.font = '10px "IBM Plex Mono", monospace';
+      g.strokeStyle = 'rgba(170,185,255,.12)'; g.fillStyle = '#8f97ba'; g.font = '10px "Source Sans 3", system-ui, sans-serif';
       for (let k = 0; k <= 8; k++) { g.beginPath(); g.moveTo(px(k), 10); g.lineTo(px(k), G.h - 24); g.stroke(); if (k % 2 === 0) g.fillText(`${k}`, px(k) - 3, G.h - 10); }
       for (const f of [1, 0.5, 0.25, 0.125]) { g.beginPath(); g.moveTo(px(0), py(N * f)); g.lineTo(px(8), py(N * f)); g.stroke(); g.fillText(`${f * 100}%`, 2, py(N * f) + 3); }
       g.fillText('half-lives →', G.w - 76, G.h - 10);

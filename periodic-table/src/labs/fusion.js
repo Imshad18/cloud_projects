@@ -1,7 +1,10 @@
 import { h, fmt, sci, fmtEnergy } from '../util.js';
 import { findNuclide } from '../store.js';
 import { qValue, resolve, coulombBarrier, fusionChannels, nuclideLabelHTML } from '../nuclear.js';
-import { bindingCurve, reactionAnim, nuclidePicker, K_B, J_PER_MEV, KG_PER_U } from './shared.js';
+import { bindingCurve, reactionAnim, K_B, J_PER_MEV, KG_PER_U } from './shared.js';
+import { nuclideButton } from '../chooser.js';
+import { smashLab } from './smash.js';
+import { particle, whatIfFused } from './colliderPhysics.js';
 
 const PRESETS = [
   { name: 'Deuterium + tritium', where: 'ITER, NIF and future power plants', ins: ['H-2', 'H-3'], outs: ['He-4', 'n'], note: 'The easiest fusion reaction to ignite on Earth. NIF achieved more fusion energy out than laser energy in for the first time in December 2022.' },
@@ -29,7 +32,8 @@ const STAGES = [
   ['Silicon', '3.3 billion K', '1 day', '#ff6b8a', 12],
 ];
 
-export function buildFusion(root) {
+export function buildFusion(root, { openElement } = {}) {
+  const smash = smashLab({ a: findNuclide('H-2'), b: findNuclide('H-3'), energy: 0.1, openElement });
   const anim = reactionAnim({ height: 260 });
   const curve = bindingCurve({ height: 280 });
   const eq = h('div', { class: 'eq' });
@@ -37,8 +41,8 @@ export function buildFusion(root) {
   const note = h('div', { class: 'note' });
   const channels = h('div', { class: 'stack', style: { gap: '6px' } });
   let A = findNuclide('H-2'), B = findNuclide('H-3');
-  const pa = nuclidePicker('fus-a', 'H-2', r => { A = r; custom(); }, { filter: r => r.a <= 70 });
-  const pb = nuclidePicker('fus-b', 'H-3', r => { B = r; custom(); }, { filter: r => r.a <= 70 });
+  const pa = nuclideButton({ value: A, title: 'Nucleus A', particles: ['p', 'n'], onPick: r => { A = typeof r === 'string' ? findNuclide(r === 'p' ? 'H-1' : 'H-1') : r; if (r === 'n') A = null; custom(r === 'n'); } });
+  const pb = nuclideButton({ value: B, title: 'Nucleus B', onPick: r => { B = r; custom(); } });
 
   function show(ins, outs, text, where) {
     const q = qValue(ins, outs);
@@ -59,13 +63,19 @@ export function buildFusion(root) {
       st('Where', where || '—'));
     note.textContent = text || '';
     note.hidden = !text;
-    anim.set(ins, outs, q, q >= 0 ? 'rgba(255,210,122,1)' : 'rgba(255,107,125,1)');
+    anim.set(ins, outs, q, q >= 0 ? 'rgba(242,184,75,1)' : 'rgba(255,107,107,1)');
     curve.mark([...ins.map(l => ({ label: l, color: '#8fdcff' })), ...outs.map(l => ({ label: l, color: '#7cf29a' }))]);
   }
-  function custom() {
+  function custom(neutron) {
+    if (neutron) { channels.replaceChildren(h('p', { class: 'hint-text' }, 'For neutrons use the collider above or the Fission lab.')); return; }
     if (!A || !B) return;
     const ch = fusionChannels(A, B);
-    if (!ch.length) { channels.replaceChildren(h('p', { class: 'warn' }, 'No known nucleus matches this combination.')); return; }
+    if (!ch.length) {
+      const wf = whatIfFused(particle('ion', A), particle('ion', B), 0);
+      channels.replaceChildren(h('div', { class: 'note' }, h('b', {}, `${A.label} + ${B.label} → ${wf.name}. `), `No such nucleus has ever been observed, so the energy comes from the liquid-drop model: merging would ${wf.Q >= 0 ? 'release' : 'cost'} ${fmt(Math.abs(wf.Q), 4)} MeV. ${wf.fate} Use "Collide any two nuclei" above to see what actually happens at each energy.`));
+      smash.set(A, B);
+      return;
+    }
     const pick = i => {
       const c = ch[i];
       show([A.label, B.label], c.products, `Compound nucleus ${ch[0].products[0]} forms, then ${c.text}. ${c.q < 0 ? 'Negative Q: this reaction needs energy put in.' : ''}`, 'Custom reaction');
@@ -74,9 +84,10 @@ export function buildFusion(root) {
     channels.replaceChildren(...ch.map((c, i) => h('button', { class: 'src-btn', style: { '--c': c.q >= 0 ? '#ffd27a' : '#ff6b7d' }, onclick: () => pick(i) },
       h('span', { class: 'dot' }), h('span', { html: `→ ${c.products.map(p => { const r = findNuclide(p); return r ? nuclideLabelHTML(r) : p; }).join(' + ')} <span class="muted" style="font-size:12px">${c.text}</span>` }), h('span', { class: 'n' }, `${c.q >= 0 ? '+' : ''}${c.q.toFixed(2)} MeV`))));
     pick(0);
+    smash.set(A, B);
   }
 
-  const presetBtns = h('div', { class: 'src-list' }, PRESETS.map((p, i) => h('button', { class: 'src-btn', style: { '--c': i === PRESETS.length - 1 ? '#ff6b7d' : '#ffd27a' }, onclick: e => { for (const b of presetBtns.children) b.classList.remove('on'); e.currentTarget.classList.add('on'); show(p.ins, p.outs, p.note, p.where); } },
+  const presetBtns = h('div', { class: 'src-list' }, PRESETS.map((p, i) => h('button', { class: 'src-btn', style: { '--c': i === PRESETS.length - 1 ? '#ff6b6b' : '#f2b84b' }, onclick: e => { for (const b of presetBtns.children) b.classList.remove('on'); e.currentTarget.classList.add('on'); show(p.ins, p.outs, p.note, p.where); if (p.ins.length === 2) { const a = findNuclide(p.ins[0]), b = findNuclide(p.ins[1]); A = a; B = b; pa.set(a); pb.set(b); smash.set(a, b); } } },
     h('span', { class: 'dot' }), h('span', {}, h('b', {}, p.name), h('span', {}, p.where)), h('span', { class: 'n' }, `${qValue(p.ins, p.outs).toFixed(1)}`))));
 
   const stageList = h('div', { class: 'src-list' }, STAGES.map(([n, T, dur, c, pi]) => h('button', { class: 'src-btn', style: { '--c': c }, onclick: () => { const p = PRESETS[pi]; show(p.ins, p.outs, p.note, p.where); } },
@@ -101,12 +112,14 @@ export function buildFusion(root) {
       h('div', { class: 'eyebrow' }, 'Fusion Lab'),
       h('h1', {}, 'Squeeze nuclei together'),
       h('p', {}, 'Light nuclei release energy when they fuse, because the product is more tightly bound. Energies are computed from measured atomic masses using E = mc².'))),
+    smash.root,
+    h('h2', { style: { fontSize: '26px', marginTop: '10px' } }, 'Energy released, from the masses'),
     h('div', { class: 'grid2' },
       h('div', { class: 'stack' }, anim.root, h('div', { class: 'card stack' }, eq, stats, note)),
       h('div', { class: 'stack' },
         h('div', { class: 'card stack' }, h('h3', {}, 'Build your own reaction'),
-          h('div', { class: 'fields' }, h('div', { class: 'field' }, h('label', { for: 'fus-a' }, 'Nucleus A'), pa.root), h('div', { class: 'field' }, h('label', { for: 'fus-b' }, 'Nucleus B'), pb.root)),
-          h('p', { class: 'hint-text', style: { margin: 0 } }, 'Type any isotope, like Li-6, O-16 or Ca-40. The exit channels below are ranked by energy released.'),
+          h('div', { class: 'fields' }, h('div', { class: 'field' }, h('label', {}, 'Nucleus A'), pa.root), h('div', { class: 'field' }, h('label', {}, 'Nucleus B'), pb.root)),
+          h('p', { class: 'hint-text', style: { margin: 0 } }, 'Any element, any isotope. The ways the new nucleus can break up are ranked by the energy they release.'),
           channels),
         h('div', { class: 'card' }, h('h3', {}, 'Famous reactions'), presetBtns))),
     h('div', { class: 'grid2' },
@@ -122,7 +135,7 @@ export function buildFusion(root) {
   presetBtns.children[0].classList.add('on');
   custom();
   show(PRESETS[0].ins, PRESETS[0].outs, PRESETS[0].note, PRESETS[0].where);
-  return { show() { anim.start(); requestAnimationFrame(() => curve.draw()); }, hide() { anim.stop(); } };
+  return { show() { anim.start(); smash.start(); smash.run(); requestAnimationFrame(() => curve.draw()); }, hide() { anim.stop(); smash.stop(); } };
 }
 
 function st(k, v) { return h('div', {}, h('div', { class: 'k' }, k), h('div', { class: 'v', style: { fontSize: '14px' } }, v)); }
