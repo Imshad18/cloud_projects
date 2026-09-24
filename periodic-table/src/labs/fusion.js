@@ -4,6 +4,7 @@ import { qValue, resolve, coulombBarrier, fusionChannels, nuclideLabelHTML } fro
 import { bindingCurve, reactionAnim, K_B, J_PER_MEV, KG_PER_U } from './shared.js';
 import { nuclideButton } from '../chooser.js';
 import { smashLab } from './smash.js';
+import { workspace, group, tabs } from './ui.js';
 import { particle, whatIfFused } from './colliderPhysics.js';
 
 const PRESETS = [
@@ -107,29 +108,23 @@ export function buildFusion(root, { openElement } = {}) {
   for (const x of [ln, lt, ltau]) x.addEventListener('input', law);
   law();
 
-  root.append(h('div', { class: 'lab' },
-    h('div', { class: 'lab-head' }, h('div', {},
-      h('div', { class: 'eyebrow' }, 'Fusion Lab'),
-      h('h1', {}, 'Squeeze nuclei together'),
-      h('p', {}, 'Light nuclei release energy when they fuse, because the product is more tightly bound. Energies are computed from measured atomic masses using E = mc².'))),
-    smash.root,
-    h('h2', { style: { fontSize: '26px', marginTop: '10px' } }, 'Energy released, from the masses'),
-    h('div', { class: 'grid2' },
+  const t = tabs([
+    { key: 'masses', label: 'Energy from the masses', body: h('div', { class: 'cols' },
       h('div', { class: 'stack' }, anim.root, h('div', { class: 'card stack' }, eq, stats, note)),
-      h('div', { class: 'stack' },
-        h('div', { class: 'card stack' }, h('h3', {}, 'Build your own reaction'),
-          h('div', { class: 'fields' }, h('div', { class: 'field' }, h('label', {}, 'Nucleus A'), pa.root), h('div', { class: 'field' }, h('label', {}, 'Nucleus B'), pb.root)),
-          h('p', { class: 'hint-text', style: { margin: 0 } }, 'Any element, any isotope. The ways the new nucleus can break up are ranked by the energy they release.'),
-          channels),
-        h('div', { class: 'card' }, h('h3', {}, 'Famous reactions'), presetBtns))),
-    h('div', { class: 'grid2' },
-      h('div', { class: 'card stack' }, h('h3', {}, 'The binding energy curve'), curve.root,
-        h('p', { class: 'hint-text', style: { margin: 0 } }, 'The higher a nucleus sits, the more tightly its protons and neutrons are held. Moving up the curve releases energy: fusion climbs from the left, fission from the right. The summit is iron-56 and nickel-62. Blue rings: reactants. Green rings: products.')),
-      h('div', { class: 'stack' },
-        h('div', { class: 'card' }, h('h3', {}, 'Inside a 25-solar-mass star'), stageList, h('p', { class: 'hint-text' }, 'Each stage burns hotter and faster. The last, silicon, lasts a single day, then the iron core collapses.')),
-        h('div', { class: 'card stack' }, h('h3', {}, 'Lawson criterion (D-T reactor)'),
-          h('div', { class: 'fields' }, h('div', { class: 'field' }, h('label', { for: 'law-n' }, 'Density n (m⁻³)'), ln), h('div', { class: 'field' }, h('label', { for: 'law-t' }, 'Temperature (keV)'), lt), h('div', { class: 'field' }, h('label', { for: 'law-tau' }, 'Confinement τ (s)'), ltau)),
-          lout, h('p', { class: 'hint-text', style: { margin: 0 } }, '1 keV ≈ 11.6 million K. Tokamaks aim for ~15 keV (170 million K), ten times hotter than the Sun\'s core.'))))));
+      h('div', { class: 'card stack' }, h('h3', {}, 'Build a reaction'),
+        h('div', { class: 'fields' }, h('div', { class: 'field' }, h('label', {}, 'Nucleus A'), pa.root), h('div', { class: 'field' }, h('label', {}, 'Nucleus B'), pb.root)),
+        h('p', { class: 'hint-text', style: { margin: 0 } }, 'Any element, any isotope. The ways the new nucleus can break up are ranked by the energy they release.'), channels)) },
+    { key: 'curve', label: 'Binding energy curve', body: h('div', { class: 'card stack' }, curve.root, h('p', { class: 'hint-text', style: { margin: 0 } }, 'The higher a nucleus sits, the more tightly its protons and neutrons are held. Moving up the curve releases energy: fusion climbs from the left, fission from the right. The summit is iron-56 and nickel-62. Blue rings: reactants. Green rings: products.')), onShow: () => curve.draw() },
+    { key: 'stars', label: 'Inside stars', body: h('div', { class: 'card stack' }, h('h3', {}, 'Burning stages of a 25-solar-mass star'), stageList, h('p', { class: 'hint-text', style: { margin: 0 } }, 'Each stage burns hotter and faster. The last, silicon, lasts a single day, then the iron core collapses.')) },
+    { key: 'reactor', label: 'Fusion reactors', body: h('div', { class: 'card stack' }, h('h3', {}, 'Lawson criterion (deuterium-tritium)'),
+      h('div', { class: 'fields' }, h('div', { class: 'field' }, h('label', { for: 'law-n' }, 'Density n (m⁻³)'), ln), h('div', { class: 'field' }, h('label', { for: 'law-t' }, 'Temperature (keV)'), lt), h('div', { class: 'field' }, h('label', { for: 'law-tau' }, 'Confinement τ (s)'), ltau)),
+      lout, h('p', { class: 'hint-text', style: { margin: 0 } }, '1 keV ≈ 11.6 million K. Tokamaks aim for ~15 keV (170 million K), ten times hotter than the Sun\'s core.')) },
+  ]);
+  workspace(root, {
+    eyebrow: 'Fusion Lab', title: 'Squeeze nuclei together', intro: 'Any two nuclei, any energy up to ten times the Oh-My-God particle. Impossible reactions still run so you can see what physics says would happen.',
+    side: [group('Collide', smash.controls), group('Famous reactions', presetBtns)],
+    main: [smash.stage, smash.result, t.root],
+  });
 
   show(PRESETS[0].ins, PRESETS[0].outs, PRESETS[0].note, PRESETS[0].where);
   presetBtns.children[0].classList.add('on');

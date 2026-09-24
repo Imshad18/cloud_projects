@@ -3,7 +3,7 @@ import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRe
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ELEMENTS } from './store.js';
 import { SOURCES, SOURCE_ORDER } from './data/origins.js';
-import { easeInOut, h, reducedMotion } from './util.js';
+import { easeInOut, h, reducedMotion, setColorVars } from './util.js';
 
 const TW = 140, TH = 180;
 
@@ -31,7 +31,9 @@ export class TableScene {
     document.getElementById('css3d').append(this.css.domElement);
 
     this.controls = new OrbitControls(this.camera, this.css.domElement);
-    Object.assign(this.controls, { zoomToCursor: true, enableDamping: true, dampingFactor: 0.08, rotateSpeed: 0.5, zoomSpeed: 0.9, minDistance: 300, maxDistance: 12000, screenSpacePanning: true });
+    Object.assign(this.controls, { zoomToCursor: true, enableRotate: false, enableDamping: true, dampingFactor: 0.12, zoomSpeed: 1.1, panSpeed: 1, minDistance: 250, maxDistance: 14000, screenSpacePanning: true });
+    this.controls.mouseButtons = { LEFT: -1, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    this.controls.touches = { ONE: -1, TWO: THREE.TOUCH.DOLLY_PAN };
     this.controls.addEventListener('change', () => { this.cssDirty = true; });
 
     this.buildStars();
@@ -48,6 +50,7 @@ export class TableScene {
     }
     this.clock = new THREE.Clock();
     this.animate = this.animate.bind(this);
+    this.looping = true;
     requestAnimationFrame(this.animate);
   }
 
@@ -157,25 +160,75 @@ export class TableScene {
     }
   }
 
+  // Left drag (or one finger) rotates around the point you grabbed; right drag / two fingers pan; wheel / pinch zooms toward the cursor.
   bindPointer() {
     const dom = this.css.domElement;
-    let down = null;
-    dom.addEventListener('pointerdown', ev => {
+    const pts = new Map();
+    let down = null, last = null, pivot = null, rotating = false;
+    const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+    const pickPivot = ev => {
       const t = ev.target.closest && ev.target.closest('.tile');
-      down = { x: ev.clientX, y: ev.clientY, t: performance.now(), tile: t };
+      if (t) { const o = this.objOf(t._el); return o.position.clone(); }
+      const r = dom.getBoundingClientRect();
+      ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+      ray.setFromCamera(ndc, this.camera);
+      const n = new THREE.Vector3(); this.camera.getWorldDirection(n);
+      const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(n, this.controls.target);
+      const hit = new THREE.Vector3();
+      return ray.ray.intersectPlane(plane, hit) ? hit : this.controls.target.clone();
+    };
+    dom.addEventListener('pointerdown', ev => {
+      pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
+      const t = ev.target.closest && ev.target.closest('.tile');
+      if (pts.size === 1 && (ev.button === 0 || ev.pointerType !== 'mouse')) {
+        down = { x: ev.clientX, y: ev.clientY, t: performance.now(), tile: t };
+        last = [ev.clientX, ev.clientY]; pivot = pickPivot(ev); rotating = false;
+        this.camTween = null;
+      } else { down = null; rotating = false; }
       this.onHover?.(null);
     }, true);
-    addEventListener('pointerup', ev => {
+    const q = new THREE.Quaternion(), q2 = new THREE.Quaternion(), right = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+    addEventListener('pointermove', ev => {
+      if (!pts.has(ev.pointerId)) return;
+      pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
+      if (!down || pts.size !== 1) return;
+      if (!rotating && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) < 5) return;
+      rotating = true;
+      const dx = ev.clientX - last[0], dy = ev.clientY - last[1]; last = [ev.clientX, ev.clientY];
+      const cam = this.camera, tgt = this.controls.target;
+      q.setFromAxisAngle(up, -dx * 0.0055);
+      right.set(1, 0, 0).applyQuaternion(cam.quaternion);
+      q2.setFromAxisAngle(right, -dy * 0.0055);
+      // keep away from looking straight down/up, which would flip the view
+      const test = cam.position.clone().sub(tgt).applyQuaternion(q2).normalize();
+      if (Math.abs(test.y) > 0.97) q2.identity();
+      q.multiply(q2);
+      for (const v of [cam.position, tgt]) v.sub(pivot).applyQuaternion(q).add(pivot);
+      cam.quaternion.premultiply(q);
+      this.cssDirty = true;
+    });
+    const end = ev => {
+      if (!pts.has(ev.pointerId)) return;
+      pts.delete(ev.pointerId);
       if (!down) return;
       const d = Math.hypot(ev.clientX - down.x, ev.clientY - down.y);
-      if (down.tile && d < 8 && performance.now() - down.t < 700) {
+      if (down.tile && !rotating && d < 8 && performance.now() - down.t < 700) {
         // The browser fires a click after a touch; keep it from landing on the panel that opens.
         if (ev.pointerType !== 'mouse') this.noClickUntil = performance.now() + 450;
         this.onSelect?.(down.tile._el);
       }
-      down = null;
-    });
+      down = null; rotating = false;
+    };
+    addEventListener('pointerup', end); addEventListener('pointercancel', end);
     addEventListener('click', ev => { if (performance.now() < (this.noClickUntil || 0)) { ev.stopPropagation(); ev.preventDefault(); } }, true);
+    dom.addEventListener('dblclick', ev => { const t = ev.target.closest && ev.target.closest('.tile'); if (t) this.focusOn(t._el); else this.fitCamera(); });
+    dom.addEventListener('contextmenu', ev => ev.preventDefault());
+  }
+  // Fly the camera to a tile
+  focusOn(e) {
+    const o = this.objOf(e), p = o.position.clone();
+    const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(o.quaternion);
+    this.camTween = { t0: performance.now() / 1000, d: 0.9, from: this.camera.position.clone(), to: p.clone().add(dir.multiplyScalar(650)), fromT: this.controls.target.clone(), toT: p };
   }
 
   // ---------- layouts ----------
@@ -279,7 +332,9 @@ export class TableScene {
 
   // Fit the current layout into the part of the screen not covered by the UI.
   fitCamera(instant = false) {
-    const W = innerWidth, H = innerHeight, { top = 60, bottom = 120 } = this.insets || {};
+    const W = innerWidth, H = innerHeight;
+    let { top = 60, bottom = 120 } = this.insets || {};
+    top = Math.min(top, H * 0.35); bottom = Math.min(bottom, H * 0.45);
     const freeH = Math.max(120, H - top - bottom), freeW = Math.max(200, W - 24);
     const vf = THREE.MathUtils.degToRad(this.camera.fov), tv = Math.tan(vf / 2);
     const sizes = { table: [2650, 1900], origins: [3300, 3000], timeline: [4000, 2500], sphere: [2100, 2100], helix: [2200, 1500], grid: [2000, 2000] };
@@ -291,7 +346,8 @@ export class TableScene {
     const worldPerPx = (2 * dist * tv) / H;
     const lift = ((bottom - top) / 2) * worldPerPx; // shift the view so the layout centres in the free band
     const from = this.camera.position.clone(), fromT = this.controls.target.clone();
-    const to = new THREE.Vector3(0, -lift, dist), toT = new THREE.Vector3(0, -lift, 0);
+    const cy = this.layout === 'table' ? -60 : 0; // vertical centre of the layout
+    const to = new THREE.Vector3(0, cy - lift, dist), toT = new THREE.Vector3(0, cy - lift, 0);
     if (instant) { this.camera.position.copy(to); this.controls.target.copy(toT); this.controls.update(); this.cssDirty = true; return; }
     this.camTween = { t0: performance.now() / 1000, d: 1.2, from, to, fromT, toT };
   }
@@ -308,7 +364,7 @@ export class TableScene {
   applyMode(mode) {
     for (const t of this.tiles) {
       const c = mode.color(t._el);
-      t.style.setProperty('--c', c || '#3a3f58');
+      setColorVars(t, c || '#555a66');
       t._val.textContent = mode.value ? mode.value(t._el) : '';
     }
   }
@@ -347,11 +403,11 @@ export class TableScene {
   setActive(on) {
     this.active = on;
     document.getElementById('stage').style.visibility = on ? '' : 'hidden';
-    if (on) { this.cssDirty = true; requestAnimationFrame(this.animate); }
+    if (on && !this.looping) { this.looping = true; this.cssDirty = true; requestAnimationFrame(this.animate); }
   }
 
   animate() {
-    if (!this.active) return;
+    if (!this.active) { this.looping = false; return; }
     requestAnimationFrame(this.animate);
     const dt = Math.min(this.clock.getDelta(), 0.05), now = performance.now() / 1000;
     // tile tweens

@@ -3,6 +3,7 @@ import { ELEMENTS, bySym } from '../store.js';
 import { SOURCES, SOURCE_ORDER } from '../data/origins.js';
 import { BODY } from '../data/extras.js';
 import { OriginAnim } from '../originAnim.js';
+import { workspace, group, tabs } from './ui.js';
 
 const EVENTS = [
   ['0', 'The Big Bang', 'Space, time and energy begin expanding from a hot, dense state 13.8 billion years ago.', 'BB'],
@@ -79,24 +80,17 @@ export function buildOrigins(root, { openElement, highlightSource }) {
   const bodyLegend = h('div', { class: 'origin-legend' }, mixArr.map(([k, p]) => h('button', { onclick: () => { cur = k; render(); } },
     h('span', { style: { width: '12px', height: '12px', borderRadius: '4px', background: SOURCES[k].color, display: 'block' } }), h('span', {}, SOURCES[k].name), h('span', { class: 'pct' }, `${p.toFixed(1)}%`))));
 
-  root.append(h('div', { class: 'lab' },
-    h('div', { class: 'lab-head' }, h('div', {},
-      h('div', { class: 'eyebrow' }, 'Cosmic Origins'),
-      h('h1', {}, 'Where every atom was born'),
-      h('p', {}, 'Eight cosmic factories made the elements. Pick one to watch it work and see everything it forged.'))),
-    h('div', { class: 'grid2' },
-      h('div', { class: 'stack' },
-        h('div', { class: 'anim-box', style: { aspectRatio: '16/9' } }, canvas),
-        h('div', { class: 'card stack' }, title, meta, text, h('h3', {}, 'Step by step'), journey)),
-      h('div', { class: 'stack' },
-        h('div', { class: 'card' }, h('h3', {}, 'Cosmic factories'), list),
-        h('div', { class: 'card stack' }, chipTitle, chips,
-          h('button', { class: 'btn primary', onclick: () => highlightSource(cur) }, 'Light them up on the 3D table →')))),
-    h('div', { class: 'card' }, h('h3', {}, 'Cosmic timeline'), h('div', { class: 'timeline' }, axis, h('div', { class: 'lbl' }, h('span', {}, 'Big Bang'), h('span', {}, 'Today'))), detail),
-    h('div', { class: 'card stack' },
-      h('h3', {}, 'What your body is made of, by birthplace'),
-      h('p', { class: 'muted', style: { margin: 0 } }, 'Your body mass, weighted by where each element was made. The hydrogen in your water is from the Big Bang; most of your oxygen and carbon came from dying stars.'),
-      bodyBar, bodyLegend)));
+  const t = tabs([
+    { key: 'about', label: 'How it works', body: h('div', { class: 'cols' }, h('div', { class: 'card stack' }, title, text, meta), h('div', { class: 'card stack' }, h('h3', {}, 'Step by step'), journey)) },
+    { key: 'made', label: 'Elements made', body: h('div', { class: 'card stack' }, chipTitle, chips, h('button', { class: 'btn primary', style: { alignSelf: 'start' }, onclick: () => highlightSource(cur) }, 'Light them up on the 3D table →')) },
+    { key: 'timeline', label: 'Cosmic timeline', body: h('div', { class: 'card stack' }, h('div', { class: 'timeline' }, axis, h('div', { class: 'lbl' }, h('span', {}, 'Big Bang'), h('span', {}, 'Today'))), detail) },
+    { key: 'body', label: 'Your body', body: h('div', { class: 'card stack' }, h('p', { class: 'muted', style: { margin: 0 } }, 'Your body mass, weighted by where each element was made. The hydrogen in your water is from the Big Bang; most of your oxygen and carbon came from dying stars.'), bodyBar, bodyLegend) },
+  ]);
+  workspace(root, {
+    eyebrow: 'Cosmic Origins', title: 'Where every atom was born', intro: 'Eight cosmic factories made the elements. Pick one to watch it work and see everything it forged.',
+    side: [group('Cosmic factories', list)],
+    main: [h('div', { class: 'stage stage-tall' }, canvas), t.root],
+  });
   pick(6);
   return { show() { anim.start(); render(); }, hide() { anim.stop(); } };
 }

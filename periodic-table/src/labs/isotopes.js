@@ -1,6 +1,7 @@
 import { h, fmt, fmtTime, fitCanvas, ramp, RAMP_CSS, clamp, sci, SCREEN } from '../util.js';
 import { NUCS, byZ, findNuclide } from '../store.js';
 import { nuclideButton } from '../chooser.js';
+import { workspace, group, tabs } from './ui.js';
 import { bePerNucleon, bindingEnergy, decayChain, modeColor, modeText, MODE_INFO, nuclideLabelHTML, U } from '../nuclear.js';
 
 const MAGIC = [2, 8, 20, 28, 50, 82, 126];
@@ -213,23 +214,23 @@ export function buildIsotopes(root, { openElement }) {
   const pickBtn = nuclideButton({ value: sel, title: 'Pick any nucleus', onPick: r => { if (typeof r !== 'string') select(r, true); } });
   const famous = ['H-3', 'C-14', 'K-40', 'Co-60', 'Sr-90', 'Tc-99m', 'I-131', 'Cs-137', 'Rn-222', 'Ra-226', 'U-235', 'U-238', 'Pu-239', 'Am-241', 'Bi-209', 'Fe-56'];
 
-  root.append(h('div', { class: 'lab' },
-    h('div', { class: 'lab-head' }, h('div', {},
-      h('div', { class: 'eyebrow' }, 'Isotope Lab'),
-      h('h1', {}, 'The chart of nuclides'),
-      h('p', {}, `All ${GROUND.length.toLocaleString()} known nuclei, one square each: protons up, neutrons across. The pale line of stable nuclei is the valley of stability. Drag to pan, scroll or pinch to zoom, tap a square.`))),
-    h('div', { class: 'row', style: { justifyContent: 'space-between' } }, modeTabs,
-      h('div', { class: 'row' }, h('div', { style: { width: '230px' } }, pickBtn.root), h('div', { class: 'field', style: { width: '190px' } }, search), h('button', { class: 'btn', onclick: () => { fit(); draw(); } }, 'Reset view'))),
-    h('div', { class: 'grid2' },
-      h('div', { class: 'stack' }, box, legend,
-        h('div', { class: 'row small' }, h('span', { class: 'muted' }, 'Famous isotopes:'), famous.map(f => h('button', { class: 'el-chip', style: { '--c': '#ffd27a' }, onclick: () => select(findNuclide(f), true) }, h('b', {}, f))))),
-      h('div', { class: 'stack' }, h('div', { class: 'card stack' }, info), h('div', { class: 'card stack' }, chainBox))),
-    h('div', { class: 'grid2' },
-      h('div', { class: 'card stack' }, h('h3', {}, 'Half-life simulator'), sim.root),
-      h('div', { class: 'card stack' }, h('h3', {}, 'Half-life & dating calculator'),
-        h('div', { class: 'fields' }, h('div', { class: 'field' }, h('label', { for: 'calc-t' }, 'Time elapsed'), calcT), h('div', { class: 'field' }, h('label', { for: 'calc-u' }, 'Unit'), calcU), h('div', { class: 'field' }, h('label', { for: 'calc-f' }, '% of parent left'), calcF)),
-        calcOut,
-        h('p', { class: 'hint-text' }, 'Carbon-14 dating: living things keep a steady C-14 level; after death it halves every 5,730 years. Uranium-lead dating uses U-238 (4.47 billion years) to date the oldest rocks and meteorites.')))));
+  box.classList.add('stage', 'stage-tall'); box.style.height = '';
+  const t = tabs([
+    { key: 'chain', label: 'Decay chain', body: h('div', { class: 'card stack' }, chainBox) },
+    { key: 'sim', label: 'Half-life simulator', body: h('div', { class: 'card stack' }, sim.root), onShow: () => sim.draw() },
+    { key: 'calc', label: 'Dating calculator', body: h('div', { class: 'card stack' },
+      h('div', { class: 'fields' }, h('div', { class: 'field' }, h('label', { for: 'calc-t' }, 'Time elapsed'), calcT), h('div', { class: 'field' }, h('label', { for: 'calc-u' }, 'Unit'), calcU), h('div', { class: 'field' }, h('label', { for: 'calc-f' }, '% of parent left'), calcF)),
+      calcOut, h('p', { class: 'hint-text', style: { margin: 0 } }, 'Carbon-14 dating: living things keep a steady C-14 level; after death it halves every 5,730 years. Uranium-lead dating uses U-238 (4.47 billion years) to date the oldest rocks and meteorites.')), onShow: () => calc() },
+  ]);
+  workspace(root, {
+    eyebrow: 'Isotope Lab', title: 'Chart of nuclides', intro: `All ${GROUND.length.toLocaleString()} known nuclei: protons up, neutrons across. Drag to pan, scroll or pinch to zoom, tap a square.`,
+    side: [
+      group('Find a nucleus', pickBtn.root, search, h('div', { class: 'el-chips' }, famous.map(fm => h('button', { class: 'el-chip', style: { '--c': '#f2b84b' }, onclick: () => select(findNuclide(fm), true) }, h('b', {}, fm))))),
+      group('Colour the chart by', modeTabs, legend, h('button', { class: 'btn small', onclick: () => { fit(); draw(); } }, 'Reset view')),
+      group('Selected', info),
+    ],
+    main: [box, t.root],
+  });
 
   let first = true;
   return {

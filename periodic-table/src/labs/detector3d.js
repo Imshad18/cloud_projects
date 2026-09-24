@@ -47,11 +47,16 @@ export class Detector3D {
     const x = dot.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
     this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(dot), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
     this.scene.add(this.glow);
+    this.bunches = [0, 1].map(i => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow.material.map, color: i ? 0xffb38a : 0x8fdcff, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })); sp.scale.set(0.9, 0.9, 1); sp.visible = false; this.scene.add(sp); return sp; });
   }
   // particles: {type, q, px, py, pz, E, soft}
   show(scene) {
-    this.event.clear(); this.tracks = []; this.t = 0;
+    this.event.clear(); this.tracks = []; this.t = 0; this.flashT = 99;
+    this.mode = scene?.kind || 'none';
+    for (const b of this.bunches) b.visible = this.mode === 'approach';
+    this.approachDur = scene?.dur || 0.7;
     if (!scene || scene.kind !== 'detector') return;
+    this.flashT = 0;
     const beamAxis = new THREE.Vector3(0, 0, 1);
     for (const p of scene.particles) {
       const pt = Math.hypot(p.px, p.py) || 1e-6, ptot = Math.hypot(pt, p.pz);
@@ -61,7 +66,7 @@ export class Detector3D {
         const tanL = p.pz / pt, phi0 = Math.atan2(p.py, p.px), q = p.q;
         const maxR = p.type === 'mu' ? R_MU : p.type === 'e' ? R_ECAL : R_TRK;
         const pts = [];
-        const steps = 220, sMax = Math.min(40, (maxR * 2.4) * Math.sqrt(1 + tanL * tanL));
+        const steps = p.soft ? 70 : 220, sMax = Math.min(40, (maxR * 2.4) * Math.sqrt(1 + tanL * tanL));
         for (let i = 0; i <= steps; i++) {
           const s = (i / steps) * sMax / Math.sqrt(1 + tanL * tanL); // transverse path length
           let x, y;
@@ -79,14 +84,16 @@ export class Detector3D {
           pts.push(new THREE.Vector3(x, y, z));
         }
         if (pts.length < 2) continue;
+        const vz = p.vz || 0;
+        if (vz) for (const v of pts) v.z += vz;
         const color = p.type === 'mu' ? COL.mu : p.type === 'e' ? COL.e : p.type === 'tau' ? COL.tau : q > 0 ? COL.trkp : COL.trkn;
         const geo = new THREE.BufferGeometry().setFromPoints(pts);
-        const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: p.soft ? 0.55 : 1 }));
+        const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: p.pileup ? 0.3 : p.soft ? 0.55 : 1 }));
         geo.setDrawRange(0, 0);
         this.event.add(line); this.tracks.push({ geo, n: pts.length });
         if (p.type === 'e') this.tower(pts[pts.length - 1], 0x6ee7a8, Math.min(1, p.E / 50), R_ECAL, R_ECAL2);
         if (p.type === 'mu' && !p.soft) for (const r of [4.2, 5.4, 6.6]) { const hit = pts.find(v => Math.hypot(v.x, v.y) > r); if (hit) this.hit(hit, 0xff4d5e); }
-      } else if (p.type === 'gamma' || p.type === 'nh') {
+      } else if ((p.type === 'gamma' || p.type === 'nh') && !(p.soft && pt < 1.5)) {
         const dir = new THREE.Vector3(p.px, p.py, p.pz).normalize();
         const rIn = p.type === 'gamma' ? R_ECAL : R_ECAL2, rOut = p.type === 'gamma' ? R_ECAL2 : R_HCAL2;
         const tHit = Math.min(rIn / (Math.hypot(dir.x, dir.y) || 1e-6), Z_HALF / (Math.abs(dir.z) || 1e-6));
@@ -143,7 +150,10 @@ export class Detector3D {
     const f = Math.min(1, this.t / 1.1);
     for (const tr of this.tracks) tr.geo.setDrawRange(0, Math.max(2, Math.floor(tr.n * f)));
     this.flash.intensity *= 0.9;
-    this.glow.scale.setScalar(Math.max(0.01, 1.4 * (1 - this.t * 1.5)));
+    if (this.mode === 'approach') { const k = Math.min(1, this.t / this.approachDur); this.bunches[0].position.set(0, 0, -9 * (1 - k)); this.bunches[1].position.set(0, 0, 9 * (1 - k)); }
+    this.flashT += dt;
+    this.glow.visible = this.flashT < 0.7;
+    this.glow.scale.setScalar(Math.max(0.01, 2 * (1 - this.flashT * 1.5)));
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }

@@ -5,6 +5,7 @@ import { bindingCurve, J_PER_MEV, KG_PER_U } from './shared.js';
 import { nuclideButton } from '../chooser.js';
 import { fissionBarrier, fmtE, OMG_MEV } from './colliderPhysics.js';
 import { eventCanvas } from './eventView.js';
+import { workspace, group, tabs } from './ui.js';
 
 const FUELS = [
   { l: 'U-235', split: [36, 92, 3], E: 2.5e-8, note: 'The fuel of most power reactors: 0.72% of natural uranium. Slow (thermal) neutrons split it.' },
@@ -32,7 +33,7 @@ export function buildFission(root, { openElement } = {}) {
   const eq = h('div', { class: 'eq' });
   const title = h('h3', { style: { fontSize: '21px' } }), text = h('p', { style: { margin: 0 } });
   const stats = h('div', { class: 'stat-grid' });
-  const frags = h('div', { class: 'grid2', style: { gap: '10px' } });
+  const frags = h('div', { class: 'cols' });
   const zS = h('input', { type: 'range', id: 'fis-z', min: 1, max: 46 });
   const aS = h('input', { type: 'range', id: 'fis-a', min: 1, max: 200 });
   const nS = h('input', { type: 'range', id: 'fis-n', min: 0, max: 10 });
@@ -146,30 +147,28 @@ export function buildFission(root, { openElement } = {}) {
   eS.addEventListener('input', () => { st.E = Math.pow(10, eS.value / 100 - 8); update(); });
   eS.addEventListener('change', run);
 
-  const fuelTabs = h('div', { class: 'tabs' }, FUELS.map((f, i) => h('button', { class: i ? '' : 'on', onclick: e => { for (const b of fuelTabs.children) b.classList.remove('on'); e.currentTarget.classList.add('on'); st.target = findNuclide(f.l); tBtn.set(st.target); st.sf = !!f.sf; for (const b of modeSeg.children) b.classList.toggle('on', (b.dataset.k === 'sf') === st.sf); st.E = f.E || st.E; [st.zl, st.al, st.nn] = f.split; update(); run(); } }, f.l)));
+  const fuelTabs = h('div', { class: 'seg' }, FUELS.map((f, i) => h('button', { class: i ? '' : 'on', onclick: e => { for (const b of fuelTabs.children) b.classList.remove('on'); e.currentTarget.classList.add('on'); st.target = findNuclide(f.l); tBtn.set(st.target); st.sf = !!f.sf; for (const b of modeSeg.children) b.classList.toggle('on', (b.dataset.k === 'sf') === st.sf); st.E = f.E || st.E; [st.zl, st.al, st.nn] = f.split; update(); run(); } }, f.l)));
   const marks = h('div', { class: 'marks' }, E_MARKS.map(([l, v]) => h('button', { onclick: () => { st.E = v; update(); run(); } }, l)));
   const reactor = chainReactor();
 
-  root.append(h('div', { class: 'lab' },
-    h('div', { class: 'lab-head' }, h('div', {},
-      h('div', { class: 'eyebrow' }, 'Fission Lab'),
-      h('h1', {}, 'Split any nucleus'),
-      h('p', {}, 'In 1938 Hahn, Strassmann, Meitner and Frisch found that uranium hit by a neutron splits in two. Here you can try any element, any isotope, any neutron energy and any way of splitting it. Energies come from measured masses, or from the liquid-drop model for nuclei never observed.'))),
-    h('div', { class: 'row' }, h('span', { class: 'small muted' }, 'Quick picks:'), fuelTabs),
-    h('div', { class: 'grid2' },
-      h('div', { class: 'stack' }, ev.root, h('div', { class: 'card stack' }, eq, title, text, note, stats, frags)),
-      h('div', { class: 'stack mobile-first' },
-        h('div', { class: 'card stack' }, h('h3', {}, 'Your experiment'),
-          h('div', { class: 'field' }, h('label', {}, 'Nucleus to split'), tBtn.root),
-          h('div', { class: 'field' }, h('label', {}, 'How'), modeSeg),
-          h('div', { class: 'field' }, h('label', { for: 'fis-e' }, 'Neutron energy', eV), eS, marks),
-          h('div', { class: 'field' }, h('label', { for: 'fis-z' }, 'Light fragment: protons', zV), zS),
-          h('div', { class: 'field' }, h('label', { for: 'fis-a' }, 'Light fragment: mass number', aV), aS),
-          h('div', { class: 'field' }, h('label', { for: 'fis-n' }, 'Free neutrons released', nV), nS),
-          h('div', { class: 'row' }, h('button', { class: 'btn primary big', onclick: run }, 'Split it'), forceBtn),
-          h('div', { class: 'canvas-box', style: { height: '160px' } }, yieldCv)),
-        h('div', { class: 'card stack' }, h('h3', {}, 'Binding energy'), curve.root))),
-    h('div', { class: 'card stack' }, h('h3', {}, 'Chain reaction reactor'), reactor.root)));
+  ev.root.classList.add('stage'); ev.root.style.aspectRatio = ''; ev.root.style.maxHeight = ''; ev.root.style.height = 'clamp(300px, 46vh, 520px)';
+  const t = tabs([
+    { key: 'result', label: 'Result', body: h('div', { class: 'cols' }, h('div', { class: 'card stack' }, eq, title, text, note), h('div', { class: 'stack' }, stats, frags)) },
+    { key: 'yield', label: 'Fragment yields', body: h('div', { class: 'card stack' }, h('div', { class: 'canvas-box', style: { height: '280px' } }, yieldCv), h('p', { class: 'hint-text', style: { margin: 0 } }, 'Heavy nuclei rarely split evenly: fragments cluster in two humps. Lighter nuclei split symmetrically. The gold dots are your fragments.')), onShow: () => drawYield() },
+    { key: 'curve', label: 'Binding energy', body: h('div', { class: 'card stack' }, curve.root), onShow: () => curve.draw() },
+    { key: 'reactor', label: 'Chain-reaction reactor', body: h('div', { class: 'card stack' }, reactor.root) },
+  ]);
+  workspace(root, {
+    eyebrow: 'Fission Lab', title: 'Split any nucleus', intro: 'Any element, any isotope, any neutron energy, any way of splitting it. Energies come from measured masses, or the liquid-drop model for nuclei never observed.',
+    side: [
+      group('Quick picks', fuelTabs),
+      group('Nucleus', tBtn.root, h('div', { class: 'field' }, h('label', {}, 'How it splits'), modeSeg)),
+      group('Neutron energy', h('div', { class: 'field' }, h('label', { for: 'fis-e' }, 'Energy', eV), eS, marks)),
+      group('The split', h('div', { class: 'field' }, h('label', { for: 'fis-z' }, 'Light fragment protons', zV), zS), h('div', { class: 'field' }, h('label', { for: 'fis-a' }, 'Light fragment mass number', aV), aS), h('div', { class: 'field' }, h('label', { for: 'fis-n' }, 'Free neutrons', nV), nS),
+        h('div', { class: 'row' }, h('button', { class: 'btn primary big', style: { flex: 1 }, onclick: () => { run(); t.show('result'); if (innerWidth <= 900) ev.root.scrollIntoView({ behavior: 'smooth' }); } }, 'Split it'), forceBtn)),
+    ],
+    main: [ev.root, t.root],
+  });
 
   update();
   return {

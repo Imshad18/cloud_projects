@@ -15,7 +15,7 @@ export function smashLab({ a, b, energy = 1, openElement }) {
   const eV = h('b');
   const eIn = h('input', { type: 'number', id: 'smash-ein', step: 'any', min: '0' });
   const eU = h('select', { id: 'smash-eu', style: { width: 'auto' } }, [['eV', 1e-6], ['keV', 1e-3], ['MeV', 1], ['GeV', 1e3], ['TeV', 1e6], ['PeV', 1e9], ['EeV', 1e12], ['ZeV', 1e15]].map(([l, v]) => h('option', { value: v }, l)));
-  const title = h('h3', { style: { fontSize: '21px' } }), text = h('p', { style: { margin: 0 } }), extra = h('div', { class: 'stack', style: { gap: '10px' } });
+  const title = h('h2', {}), text = h('p', { style: { margin: 0 } }), extra = h('div', { class: 'stack', style: { gap: '10px' } });
   const stats = h('div', { class: 'stat-grid' });
   const marks = h('div', { class: 'marks' });
   let res, P, T, col;
@@ -58,18 +58,18 @@ export function smashLab({ a, b, energy = 1, openElement }) {
   eS.addEventListener('change', run);
   const applyE = () => { const v = +eIn.value * +eU.value; if (v > 0) { st.KE = v; update(true); run(); } };
   eIn.addEventListener('change', applyE); eU.addEventListener('change', applyE);
-  const root = h('div', { class: 'grid2' },
-    h('div', { class: 'stack' }, ev.root, h('div', { class: 'card stack' }, title, text, stats, extra)),
-    h('div', { class: 'card stack mobile-first' },
-      h('h3', {}, 'Collide any two nuclei'),
-      h('p', { class: 'hint-text', style: { margin: 0 } }, 'Every element and isotope, any energy from a gentle nudge to ten times the Oh-My-God particle. Impossible reactions still run so you can see what physics says would happen.'),
-      h('div', { class: 'fields' }, h('div', { class: 'field' }, h('label', {}, 'Nucleus A'), aBtn.root), h('div', { class: 'field' }, h('label', {}, 'Nucleus B'), bBtn.root)),
-      h('div', { class: 'field' }, h('label', { for: 'smash-e' }, 'Energy of A', eV), eS, marks),
-      h('div', { class: 'field' }, h('label', { for: 'smash-ein' }, 'Exact energy'), h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, eIn, eU)),
-      h('button', { class: 'btn primary big', onclick: run }, 'Collide')));
+  ev.root.classList.add('stage', 'stage-tall'); ev.root.style.aspectRatio = ''; ev.root.style.maxHeight = '';
+  const stage = ev.root;
+  const result = h('div', { class: 'card result' }, title, text, stats, extra);
+  const controls = h('div', { class: 'stack', style: { gap: '12px' } },
+    h('div', { class: 'field' }, h('label', {}, 'Nucleus A (moving)'), aBtn.root), h('div', { class: 'field' }, h('label', {}, 'Nucleus B (target)'), bBtn.root),
+    h('div', { class: 'field' }, h('label', { for: 'smash-e' }, 'Energy of A', eV), eS, marks),
+    h('div', { class: 'field' }, h('label', { for: 'smash-ein' }, 'Exact energy'), h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, eIn, eU)),
+    h('button', { class: 'btn primary big', onclick: () => { run(); if (innerWidth <= 900) stage.scrollIntoView({ behavior: 'smooth' }); } }, 'Collide'));
+  const root = h('div', {}, stage, result, controls);
   update();
   return {
-    root, start: () => ev.start(), stop: () => ev.stop(), run,
+    root, stage, result, controls, start: () => ev.start(), stop: () => ev.stop(), run,
     set(a1, b1, e1) { st.a = a1; st.b = b1; if (e1) st.KE = e1; aBtn.set(a1); bBtn.set(b1); update(); run(); },
     get a() { return st.a; }, get b() { return st.b; },
   };

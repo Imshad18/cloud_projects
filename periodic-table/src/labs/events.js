@@ -25,7 +25,7 @@ const PP = {
 };
 const lerpLog = (xs, ys, x) => {
   if (x <= xs[0]) return ys[0] * Math.pow(Math.max(x, 1e-6) / xs[0], 4);
-  if (x >= xs[xs.length - 1]) return ys[ys.length - 1] * Math.pow(x / xs[xs.length - 1], 0.5);
+  if (x >= xs[xs.length - 1]) return ys[ys.length - 1] * Math.pow(x / xs[xs.length - 1], 0.35); // beyond 100 TeV: extrapolated
   let i = 0; while (xs[i + 1] < x) i++;
   const [a, b, ya, yb] = [xs[i], xs[i + 1], ys[i], ys[i + 1]];
   if (ya <= 0 || yb <= 0) return ya + (yb - ya) * (x - a) / (b - a);
@@ -39,7 +39,9 @@ const thr = (sqrtS, mass, f = 2.5) => Math.max(0, Math.min(1, (sqrtS - f * mass)
 export function processes(kind, sqrtS, A1 = 1, A2 = 1) {
   const T = sqrtS / 1000;
   if (kind === 'ee') return eeProcesses(sqrtS);
-  const pp = k => lerpLog(GRID, PP[k], T);
+  // Above 100 TeV the inelastic cross section keeps rising like ln²(s) (the Froissart-type growth seen from ISR to cosmic rays).
+  const inel = T <= 100 ? lerpLog(GRID, PP.inel, T) : PP.inel[PP.inel.length - 1] * Math.pow(Math.log(T * T * 1e6) / Math.log(1e10), 2);
+  const pp = k => (k === 'inel' ? inel : lerpLog(GRID, PP[k], T));
   const nColl = kind === 'AA' ? Math.pow(A1 * A2, 1) * 0.3 : 1; // hard processes scale with binary collisions
   const L = [
     { key: 'minbias', label: 'Soft collision (minimum bias)', sigma: pp('inel') * (kind === 'AA' ? 7.7 * Math.pow(A1 * A2, 0.33) / 5 : 1), trigger: false, gen: () => [] },

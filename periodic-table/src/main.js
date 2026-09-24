@@ -73,18 +73,22 @@ function renderLegend() {
 // Keep the legend above the toolbar and tell the 3D camera how much screen is free.
 function layoutChrome() {
   requestAnimationFrame(() => {
-    const dock = $('#dock').getBoundingClientRect(), leg = $('#legend'), narrow = innerWidth <= 720;
-    if (!narrow) leg.style.setProperty('--legend-bottom', `${innerHeight - dock.top + 8}px`);
+    if (state.view !== 'table') return;
+    const dockEl = $('#dock'), leg = $('#legend'), narrow = innerWidth <= 720;
+    const dock = dockEl.getBoundingClientRect();
+    if (!narrow && dock.height) leg.style.setProperty('--legend-bottom', `${innerHeight - dock.top + 8}px`);
     const lr = leg.getBoundingClientRect(), hud = $('#quiz-hud');
     let top = $('#topbar').getBoundingClientRect().bottom;
-    if (narrow && !leg.hidden) top = Math.max(top, lr.bottom);
+    if (narrow && lr.height) top = Math.max(top, lr.bottom);
     if (!hud.hidden) top = Math.max(top, hud.getBoundingClientRect().bottom);
-    let bottom = innerHeight - dock.top;
-    if (!narrow && !leg.hidden) bottom = innerHeight - lr.top;
-    scene.setInsets(top + 6, bottom + 6);
+    let bottom = dock.height ? innerHeight - dock.top : 20;
+    if (!narrow && lr.height && lr.top > innerHeight * 0.4) bottom = Math.max(bottom, innerHeight - lr.top);
+    scene.setInsets(top + 8, bottom + 8);
   });
 }
 addEventListener('resize', layoutChrome);
+try { const ro = new ResizeObserver(() => layoutChrome()); ro.observe($('#dock')); ro.observe($('#legend')); } catch { /* old browser */ }
+document.fonts?.ready?.then(() => layoutChrome());
 
 // ---------- views ----------
 const views = {};
@@ -106,6 +110,7 @@ async function openView(v, then) {
   state.view = v; setNav(v);
   const onTable = v === 'table';
   scene.setActive(onTable);
+  if (onTable) layoutChrome();
   $('#dock').hidden = !onTable; $('#legend').hidden = !onTable;
   if (!onTable) { panel.close(); scene.select(null); $('#tooltip').hidden = true; }
   if (!onTable) {
@@ -126,6 +131,7 @@ $('#layouts').addEventListener('click', e => {
   if (b.dataset.layout === 'origins' && state.mode === 'category') setMode('origin');
 });
 $('#colorby').addEventListener('change', e => setMode(e.target.value));
+$('#reset-view').addEventListener('click', () => scene.fitCamera());
 const temp = $('#temp');
 const setT = T => { state.T = T; temp.value = T; $('#temp-val').textContent = `${T} K (${Math.round(T - 273.15)} °C)`; if (state.mode === 'state') { scene.applyMode(modes.state); refilter(); } };
 temp.addEventListener('input', () => setT(+temp.value));

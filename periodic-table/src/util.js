@@ -6,7 +6,7 @@ export function h(tag, attrs = {}, ...kids) {
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v == null || v === false) continue;
     if (k === 'class') e.className = v;
-    else if (k === 'style' && typeof v === 'object') { for (const [sk, sv] of Object.entries(v)) { if (sk.startsWith('--')) e.style.setProperty(sk, sv); else e.style[sk] = sv; } }
+    else if (k === 'style' && typeof v === 'object') { for (const [sk, sv] of Object.entries(v)) { if (sk === '--c') setColorVars(e, sv); else if (sk.startsWith('--')) e.style.setProperty(sk, sv); else e.style[sk] = sv; } }
     else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
     else if (k === 'html') e.innerHTML = v;
     else e.setAttribute(k, v === true ? '' : v);
@@ -141,3 +141,12 @@ export function SCREEN() {
 export function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 export function themeChanged() { _screen = null; }
 export const FONT = '"Source Sans 3", system-ui, sans-serif';
+
+// Sets --c plus translucent variants (--c15, --c30, --c60) without relying on CSS color-mix().
+export function setColorVars(el, c) {
+  el.style.setProperty('--c', c);
+  let r = 128, g = 128, b = 128;
+  const m = String(c).match(/^#([0-9a-f]{6})$/i), m2 = String(c).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (m) { const n = parseInt(m[1], 16); r = n >> 16; g = (n >> 8) & 255; b = n & 255; } else if (m2) { r = +m2[1]; g = +m2[2]; b = +m2[3]; }
+  for (const a of [15, 30, 60]) el.style.setProperty(`--c${a}`, `rgba(${r},${g},${b},${a / 100})`);
+}

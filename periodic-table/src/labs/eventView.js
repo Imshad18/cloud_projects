@@ -20,12 +20,18 @@ export function eventCanvas({ aspect = 1.35, maxHeight = 600 } = {}) {
     const dt = Math.min(0.05, (ts - (last || ts)) / 1000); last = ts; t += dt;
     const ctx = cv.getContext('2d'); const { w, h: H } = fitCanvas(cv, ctx);
     ctx.fillStyle = SCREEN(); ctx.fillRect(0, 0, w, H);
-    if (mode === '3d' && (!scene || scene.kind === 'detector') && det) return;
+    if (mode === '3d' && (!scene || scene.kind === 'detector' || scene.kind === 'approach') && det) return;
     if (!scene) { label(ctx, 'Press collide', w / 2, H / 2, '#8a8a92', 15); return; }
-    if (scene.kind === 'detector') detector(ctx, w, H, t, scene, mode); else nuclear(ctx, w, H, t, scene);
+    if (scene.kind === 'approach') { approach(ctx, w, H, t, scene); return; }
+    if (scene.kind === 'detector') {
+      // draw the full event once it has grown, then reuse the picture
+      if (t > 1 && scene._cache && scene._cacheMode === mode && scene._cache.width === cv.width) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(scene._cache, 0, 0); return; }
+      detector(ctx, w, H, t, scene, mode);
+      if (t > 1) { const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height; c.getContext('2d').drawImage(cv, 0, 0); scene._cache = c; scene._cacheMode = mode; }
+    } else nuclear(ctx, w, H, t, scene);
   }
   const sync = () => {
-    const use3d = mode === '3d' && (!scene || scene.kind === 'detector');
+    const use3d = mode === '3d' && (!scene || scene.kind === 'detector' || scene.kind === 'approach');
     if (use3d && !det) det = new Detector3D(root);
     cv.style.visibility = use3d ? 'hidden' : '';
     if (det) { det.canvas.style.display = use3d ? 'block' : 'none'; if (use3d) { det.show(scene); if (raf) det.start(); } else det.stop(); }
@@ -37,6 +43,17 @@ export function eventCanvas({ aspect = 1.35, maxHeight = 600 } = {}) {
     start() { if (!raf) { last = 0; raf = requestAnimationFrame(frame); } if (det && mode === '3d') det.start(); },
     stop() { cancelAnimationFrame(raf); raf = 0; det?.stop(); },
   };
+}
+
+// Two bunches racing toward the collision point.
+function approach(ctx, w, H, t, s) {
+  const cx = w / 2, cy = H / 2, k = Math.min(1, t / (s.dur || 0.7));
+  ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.stroke();
+  const d = (1 - k) * w * 0.48;
+  for (const [x, c] of [[cx - d, s.c1 || '#8fdcff'], [cx + d, s.c2 || '#ffb38a']]) {
+    for (let i = 0; i < 6; i++) glow(ctx, x - Math.sign(x - cx) * i * 7, cy, 10 - i, c, 1 - i * 0.15);
+  }
+  if (s.fixed) { ctx.fillStyle = 'rgba(230,230,235,.8)'; ctx.fillRect(cx - 3, cy - 26, 6, 52); }
 }
 
 // ---------- detector (CMS-like, 3.8 T) ----------
@@ -73,9 +90,11 @@ function detector(ctx, w, H, t, s, mode) {
       const hard = !p.soft;
       ctx.strokeStyle = type === 'mu' ? COL.mu : type === 'e' ? COL.e : type === 'tau' ? COL.tau : p.q > 0 ? COL.trk : COL.trkneg;
       ctx.lineWidth = hard && type !== 'trk' ? 2.6 : 1.1;
-      ctx.beginPath(); ctx.moveTo(cx, cy);
-      const steps = 70; let x = cx, y = cy, a = phi;
+      const vx = mode === 'rz' ? (p.vz || 0) * scale : 0;
+      ctx.beginPath(); ctx.moveTo(cx + vx, cy);
+      const steps = p.soft ? 40 : 70; let x = cx + vx, y = cy, a = phi;
       const ds = (maxLen * 1.7) / steps;
+      if (p.pileup) ctx.globalAlpha = 0.45;
       const curv = mode === 'rphi' ? (p.q || 0) / rad : 0;
       for (let i = 0; i < steps * grow; i++) {
         a += curv * ds; x += Math.cos(a) * ds; y -= Math.sin(a) * ds;
@@ -84,13 +103,13 @@ function detector(ctx, w, H, t, s, mode) {
         if (d > maxLen) break;
         ctx.lineTo(x, y);
       }
-      ctx.stroke();
+      ctx.stroke(); ctx.globalAlpha = 1;
       if (type === 'e' && grow >= 1) tower(ctx, cx, cy, R * 0.5, R * 0.6, phi, Math.min(1, p.E / 50), COL.e, mode, w);
-    } else if (type === 'gamma') {
+    } else if (type === 'gamma' && !(p.soft && pt < 1)) {
       ctx.setLineDash([4, 4]); ctx.strokeStyle = p.soft ? 'rgba(255,224,102,.22)' : COL.gamma; ctx.lineWidth = p.soft ? 1 : 2.4;
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(phi) * R * 0.5 * grow, cy - Math.sin(phi) * R * 0.5 * grow); ctx.stroke(); ctx.setLineDash([]);
       if (grow >= 1) tower(ctx, cx, cy, R * 0.5, R * 0.6, phi, Math.min(1, pt / 40), '#6ee7a8', mode, w);
-    } else if (type === 'nh') {
+    } else if (type === 'nh' && pt > 1) {
       if (grow >= 1) tower(ctx, cx, cy, R * 0.62, R * 0.8, phi, Math.min(1, pt / 8), COL.nh, mode, w);
     } else if (type === 'jet' || type === 'bjet') {
       ctx.fillStyle = type === 'bjet' ? 'rgba(255,138,61,.2)' : 'rgba(255,179,71,.16)';

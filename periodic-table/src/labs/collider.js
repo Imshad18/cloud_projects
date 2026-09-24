@@ -6,6 +6,7 @@ import { particle, kinematics, keFromBeta, machine, collision, outcome, whatIfFu
 import { processes, softTracks, chargedMult, invMass, pT, poisson, expectedHist, gauss } from './events.js';
 import { eventCanvas } from './eventView.js';
 import { histChart, barChart } from './charts.js';
+import { workspace, group, tabs } from './ui.js';
 
 const MARKS = [
   ['Sun core', 1.3e-3], ['Rutherford 1909', 5], ['FRIB', 200], ['LHC proton', 6.8e6], ['Knee of cosmic rays', 3e9], ['OMG particle', OMG_MEV], ['10× OMG', OMG_MEV * 10],
@@ -70,6 +71,8 @@ export function buildCollider(root, { openElement }) {
   keIn.addEventListener('change', applyKE); keUnit.addEventListener('change', applyKE);
   spIn.addEventListener('change', () => { const b = parseFloat(spIn.value) / 100; if (b > 0 && b < 1) { st.KE = keFromBeta(particleOf(st.beam), b); update(); } else toast('Enter a speed below 100% of light speed'); });
   const evSel = h('select', { id: 'col-evmode' });
+  const puSel = h('select', { id: 'col-pu' }, [['auto', 'Automatic (LHC Run 3 at LHC energies)'], ['0', 'None: a single clean collision'], ['35', '35 (LHC Run 2)'], ['55', '55 (LHC Run 3)'], ['140', '140 (High-Luminosity LHC)']].map(([v, l]) => h('option', { value: v }, l)));
+  const pileup = () => { if (kind !== 'pp' && kind !== 'ppbar') return 0; const v = puSel.value; if (v !== 'auto') return +v; return col.sqrtS >= 5e6 && st.mode === 'collider' ? 55 : 0; };
 
   const accCv = h('canvas', { 'aria-label': 'Accelerator animation' });
   const ev = eventCanvas({ aspect: 1.25, maxHeight: 620 });
@@ -95,6 +98,7 @@ export function buildCollider(root, { openElement }) {
     mult: histChart({ title: 'Charged particles per collision', xlabel: 'Number of charged particles', ylabel: 'Collisions', logY: true }),
     pt: histChart({ title: 'Transverse momentum of charged particles', xlabel: 'pT [GeV]', ylabel: 'Particles', logY: true }),
     angle: histChart({ title: 'Scattering angle (Rutherford)', xlabel: 'Angle [degrees]', ylabel: 'Nuclei', logY: true }),
+    dijet: histChart({ title: 'Two-jet mass (up to your collision energy)', xlabel: 'm(jj) [GeV]', ylabel: 'Events / bin', logX: true, logY: true }),
   };
   const chartGrid = h('div', { class: 'chart-grid' });
 
@@ -141,14 +145,13 @@ export function buildCollider(root, { openElement }) {
       s('Collision energy √s', fmtE(col.sqrtS)), s('Free energy (centre of mass)', fmtE(col.Ecm)),
       col.sqrtSNN ? s('Per nucleon pair √sNN', fmtE(col.sqrtSNN)) : s('Mode', st.mode === 'fixed' ? 'fixed target' : 'head-on'),
       s('Wasted by fixed target', st.mode === 'fixed' ? `${fmt(100 * (1 - col.Ecm / Math.max(kin.KE, 1e-12)), 3)}%` : '0%'),
-      s('Compared with the LHC', `${sci(col.sqrtS / 1.36e7, 3)}×`));
+      s('Collision energy vs the LHC', (() => { const x = col.sqrtS / 1.36e7; return x >= 1 ? `${x >= 1e4 ? sci(x, 2) : fmt(x, 3)}× the LHC` : `${x <= 1e-4 ? sci(1 / x, 2) : fmt(1 / x, 3)}× below the LHC`; })()));
     title.textContent = res.title; text.textContent = res.text;
     noteBox.hidden = !(kin.KE > 1e8);
     if (kin.KE > 1e8) noteBox.textContent = `Cosmic-ray scale. ${kin.KE >= OMG_MEV * 0.5 ? `This matches the Oh-My-God particle seen over Utah in 1991: ${sci(kin.KE * 1.602e-13, 2)} J in one subatomic particle, like a baseball thrown at about 90 km/h. ` : ''}Hitting the atmosphere it would start an air shower of roughly ${sci(Math.max(10, kin.KE / 1000), 1)} secondary particles spread over square kilometres.`;
     chanBox.replaceChildren(res.channels.length ? h('div', { class: 'tbl-wrap' }, h('table', { class: 'data' }, h('thead', {}, h('tr', {}, h('th', {}, 'Quantity or process'), h('th', {}, 'Value'))),
       h('tbody', {}, res.channels.map(c => h('tr', {}, h('td', {}, c[0]), h('td', {}, c[2] || fmtE(c[1]))))))) : '');
     renderProducts(); renderWhatIf();
-    searchBox.hidden = !(col.sqrtS > 1e6 && kind !== 'ee');
     const key = `${P.label}|${T.label}|${st.mode}|${Math.round(Math.log10(col.sqrtS) * 50)}`;
     if (session.key !== key) resetSession(key);
     phase = 'idle'; ev.show(null); evInfo.replaceChildren();
@@ -180,13 +183,15 @@ export function buildCollider(root, { openElement }) {
     const list = nuclearView ? [charts.proc, ...(res.anim === 'deflect' || res.anim === 'bounce' ? [charts.angle] : [])]
       : kind === 'ee' ? [charts.proc, charts.mult, charts.dimuon]
         : kind === 'ep' ? [charts.proc, charts.mult, charts.pt]
-          : [charts.proc, charts.diphoton, charts.fourl, charts.dimuon, charts.mult, charts.pt];
+          : [charts.proc, charts.diphoton, charts.fourl, charts.dijet, charts.dimuon, charts.mult, charts.pt];
     if (chartGrid.children.length !== list.length || list.some((c, i) => chartGrid.children[i] !== c.root)) chartGrid.replaceChildren(...list.map(c => c.root));
     const colors = { minbias: '#6b6b73', Hgg: '#ff4d5e', H4l: '#ff4d5e', Hbb: '#ff4d5e', HH: '#ff79c6', tt: '#f2b84b', tttt: '#f2b84b', X3872: '#c79bff', Pc: '#c79bff', ee_ZH: '#ff4d5e' };
     charts.proc.set(Object.entries(session.counts).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([k, v]) => [session.labels[k] || k, v, colors[k] || '#5cc8f0']));
     const hs = session.hist;
-    charts.diphoton.set({ ...hs.diphoton, labels: [[125.1, 'Higgs', Math.max(...hs.diphoton.obs, 1)]], empty: 'Run 1 fb⁻¹ or more to see the Higgs bump' });
-    charts.fourl.set({ ...hs.fourl, labels: [[91.2, 'Z', 1], [125.1, 'H', 1]], empty: 'Run 139 fb⁻¹ to see the four-lepton peaks' });
+    const expMsg = name => { const e1 = perCollision(name); if (!e1) return 'Not possible at this energy'; const e = session.n * e1; return `Expected so far: ${e < 0.01 ? sci(e, 2) : fmt(e, 3)} events. One needs ~${sci(1 / e1, 2)} collisions`; };
+    charts.diphoton.set({ ...hs.diphoton, labels: [[125.1, 'Higgs', Math.max(...hs.diphoton.obs, 1)]], empty: expMsg('diphoton') });
+    charts.fourl.set({ ...hs.fourl, labels: [[91.2, 'Z', 1], [125.1, 'H', 1]], empty: expMsg('fourl') });
+    charts.dijet.set({ ...hs.dijet, empty: 'Two-jet collisions appear here' });
     charts.dimuon.set({ ...hs.dimuon, labels: [[0.78, 'ω', 1], [1.02, 'φ', 1], [3.1, 'J/ψ', 1], [9.46, 'Υ', 1], [91.2, 'Z', 1]] });
     charts.mult.set(hs.mult); charts.pt.set(hs.pt); charts.angle.set(hs.angle);
     const L = session.sigmaInel ? session.n / session.sigmaInel / 1000 : 0;
@@ -220,8 +225,13 @@ export function buildCollider(root, { openElement }) {
       const pool = m === 'typical' ? procs : m === 'trigger' ? procs.filter(p => p.trigger) : procs.filter(p => p.key === m);
       proc = pickWeighted(pool.length ? pool : procs);
       parts = proc.gen(sqG);
-      nSoft = proc.key === 'minbias' ? nbd(kind === 'AA' ? res.nch || chargedMult(sqG) : chargedMult(sqG)) : kind === 'ee' ? 0 : Math.round(chargedMult(sqG) * 0.35);
-      parts = [...parts, ...softTracks(Math.min(nSoft, 900), kind === 'AA' ? 0.55 : 0.45)];
+      // underlying event: a hard collision is busier than an average one (about 1.5× the tracks)
+      nSoft = proc.key === 'minbias' ? nbd(kind === 'AA' ? res.nch || chargedMult(sqG) : chargedMult(sqG)) : kind === 'ee' ? 0 : nbd(chargedMult(sqG) * 1.5);
+      parts = [...parts, ...softTracks(Math.min(nSoft, 1400), kind === 'AA' ? 0.55 : 0.45)];
+      const pu = pileup();
+      let puTracks = 0;
+      for (let i = 0; i < pu && puTracks < 2200; i++) { const vz = gauss() * 0.045, tr = softTracks(nbd(chargedMult(sqG))); for (const t of tr) { t.vz = vz; t.pileup = true; } puTracks += tr.length; parts.push(...tr); }
+      session.pu = pu;
       if (kind === 'ee' && (proc.key === 'ee_had' || proc.key === 'ee_ups')) parts = [...parts, ...jetTracks(parts.filter(p => p.type === 'jet'), Math.round(chargedMult(sqG) * 0.8))];
     }
     fillEvent(parts, nSoft);
@@ -237,7 +247,7 @@ export function buildCollider(root, { openElement }) {
     const hard = parts.filter(p => !p.soft).sort((a, b) => pT(b) - pT(a)).slice(0, 10);
     evInfo.replaceChildren(
       h('div', { class: 'row' }, h('span', { class: 'chip' }, h('i', { style: { background: proc.key.startsWith('H') ? '#ff4d5e' : '#f2b84b' } }), proc.label)),
-      h('div', { class: 'small' }, `${charged} charged tracks${recon.length ? ' · ' + recon.join(' · ') : ''}${kind === 'AA' && res.nch ? ` · ${res.nch.toLocaleString()} charged particles in the full collision (${Math.min(nSoft, 900)} drawn)` : ''}`),
+      h('div', { class: 'small' }, `${charged} charged tracks${session.pu ? ` (including ${session.pu} pile-up collisions in the same bunch crossing, drawn fainter)` : ''}${recon.length ? ' · ' + recon.join(' · ') : ''}${kind === 'AA' && res.nch ? ` · ${res.nch.toLocaleString()} charged particles in the full collision (${Math.min(nSoft, 900)} drawn)` : ''}`),
       hard.length ? h('div', { class: 'tbl-wrap' }, h('table', { class: 'data' },
         h('thead', {}, h('tr', {}, h('th', {}, 'Particle'), h('th', { class: 'num' }, 'pT (GeV)'), h('th', { class: 'num' }, 'η'), h('th', { class: 'num' }, 'Energy (GeV)'))),
         h('tbody', {}, hard.map(p => h('tr', {}, h('td', {}, NAMES[p.type] ? NAMES[p.type](p) : p.type), h('td', { class: 'num' }, pT(p).toFixed(1)), h('td', { class: 'num' }, etaOf(p).toFixed(2)), h('td', { class: 'num' }, p.E.toFixed(1))))))) : '');
@@ -249,6 +259,8 @@ export function buildCollider(root, { openElement }) {
     if (gam.length >= 2) fill(hs.diphoton, invMass(gam.slice(0, 2)));
     if (lep.length >= 4) fill(hs.fourl, invMass(lep.slice(0, 4)));
     if (mu.length >= 2) fill(hs.dimuon, invMass(mu.slice(0, 2)));
+    const jets = parts.filter(p => p.type === 'jet' || p.type === 'bjet').sort((a, b) => pT(b) - pT(a));
+    if (jets.length >= 2) fill(hs.dijet, invMass(jets.slice(0, 2)));
     fill(hs.mult, Math.max(parts.filter(p => p.q && p.type === 'trk').length, nSoft));
     for (const p of parts) if (p.q && p.type === 'trk') fill(hs.pt, pT(p));
   }
@@ -292,9 +304,11 @@ export function buildCollider(root, { openElement }) {
       const add = poisson(N * (procs.find(p => p.key === 'ee_mm')?.sigma || 0) / sig), i = binOf(session.hist.dimuon, sqG);
       if (i >= 0) session.hist.dimuon.obs[i] += add;
     }
+    const dj = procs.find(p => p.key === 'dijet');
+    if (dj) { const mu = N * dj.sigma / sig, H0 = session.hist.dijet, sh = dijetShape(H0.edges, sqG); H0.bkg = H0.bkg.map((v, i) => v + mu * sh[i]); H0.obs = H0.obs.map((v, i) => v + poisson(mu * sh[i])); }
     const nch = kind === 'AA' ? (res.nch || chargedMult(sqG)) : chargedMult(sqG);
     fillMult(N, nch); fillPt(N * nch);
-    renderCharts();
+    renderCharts(); renderOdds();
   }
   function fillMult(N, mean) {
     const H0 = session.hist.mult;
@@ -318,7 +332,7 @@ export function buildCollider(root, { openElement }) {
     const lin = (lo, hi, step) => { const e = []; for (let v = lo; v <= hi + 1e-9; v += step) e.push(+v.toFixed(6)); return e; };
     const logE = (lo, hi, n) => Array.from({ length: n + 1 }, (_, i) => lo * Math.pow(hi / lo, i / n));
     const mk = (edges, full) => ({ edges, obs: new Array(edges.length - 1).fill(0), bkg: full ? new Array(edges.length - 1).fill(0) : [], sig: full ? new Array(edges.length - 1).fill(0) : [] });
-    return { key: '', n: 0, counts: {}, labels: {}, higgs: 0, sigmaInel: 0, hist: { diphoton: mk(lin(100, 160, 1), true), fourl: mk(lin(70, 250, 3), true), dimuon: mk(logE(0.4, 150, 180), true), mult: mk(lin(0, 200, 5)), pt: mk(lin(0, 20, 0.5)), angle: mk(lin(0, 180, 5), true) } };
+    return { key: '', n: 0, counts: {}, labels: {}, higgs: 0, sigmaInel: 0, hist: { dijet: mk(logE(100, 14000, 60), true), diphoton: mk(lin(100, 160, 1), true), fourl: mk(lin(70, 250, 3), true), dimuon: mk(logE(0.4, 150, 180), true), mult: mk(lin(0, 200, 5)), pt: mk(lin(0, 20, 0.5)), angle: mk(lin(0, 180, 5), true) } };
   }
   function resetSession(key) {
     Object.assign(session, newSession(), { key });
@@ -327,49 +341,94 @@ export function buildCollider(root, { openElement }) {
     const top = Math.max(20, Math.ceil(mean * 4 / 10) * 10), step = Math.max(1, Math.round(top / 50));
     session.hist.mult.edges = Array.from({ length: Math.ceil(top / step) + 1 }, (_, i) => i * step);
     session.hist.mult.obs = new Array(session.hist.mult.edges.length - 1).fill(0);
+    const top2 = Math.max(1000, sq * 0.9); const n2 = 60;
+    session.hist.dijet.edges = Array.from({ length: n2 + 1 }, (_, i) => 100 * Math.pow(top2 / 100, i / n2));
+    session.hist.dijet.obs = new Array(n2).fill(0); session.hist.dijet.bkg = new Array(n2).fill(0); session.hist.dijet.sig = new Array(n2).fill(0);
+    perCache = {};
+  }
+  let perCache = {};
+  // expected events per collision in a plot (for the "expected so far" message)
+  function perCollision(name) {
+    if (perCache[name] != null) return perCache[name];
+    if (res.view !== 'detector' || kind === 'ee' || kind === 'ep') return (perCache[name] = 0);
+    const sig = procList().find(p => p.key === 'minbias')?.sigma; if (!sig) return (perCache[name] = 0);
+    const e = expectedHist(name, 1 / sig / 1000 * (kind === 'AA' ? 0.3 * (P.A || 1) * (T.A || 1) : 1), sqGeV());
+    return (perCache[name] = e.bkg.reduce((a, b) => a + b, 0) + e.sig.reduce((a, b) => a + b, 0));
+  }
+  function dijetShape(edges, sqG) { // falling QCD spectrum, cut off by the collision energy
+    const f = m => (m < sqG ? Math.pow(m / 100, -4.5) * Math.pow(1 - m / sqG, 6) : 0);
+    const w = edges.slice(0, -1).map((a, i) => f(Math.sqrt(a * edges[i + 1])) * (edges[i + 1] - a));
+    const t = w.reduce((a, b) => a + b, 0) || 1; return w.map(x => x / t);
   }
 
-  // ---------- animation ----------
-  let raf = 0, last = 0, accT = 0, phase = 'idle';
+  // ---------- animation: accelerate → bunches approach → impact ----------
+  let raf = 0, last = 0, accT = 0, phaseT = 0, phase = 'idle';
+  const auto = { left: 0, total: 0 };
+  const speed = () => (auto.left > 0 ? { fast: [0.25, 0.25, 0.5], max: [0.05, 0.1, 0.15] }[autoSpeed.value] || [1.3, 0.7, 1.4] : [1.3, 0.7, 1.4]);
   function run() {
-    phase = 'acc'; accT = 0; ev.show(null);
-    if (innerWidth < 1000) accCv.parentElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    phase = 'acc'; accT = 0; phaseT = 0;
+    ev.show({ kind: 'approach', dur: 99, fixed: st.mode === 'fixed' });
+    if (innerWidth <= 900 && auto.left <= 0) stageEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   function frame(ts) {
     raf = requestAnimationFrame(frame);
     if (!accCv.offsetParent) return;
     const dt = Math.min(0.05, (ts - (last || ts)) / 1000); last = ts;
-    if (phase === 'acc') { accT += dt; if (accT > 2.2) { phase = 'hit'; ev.show(makeEvent()); renderCharts(); } }
-    drawAcc();
+    const [tAcc, tApp, tHold] = speed();
+    if (phase === 'acc') { accT += dt; if (accT > tAcc) { phase = 'approach'; phaseT = 0; ev.show({ kind: 'approach', dur: tApp, fixed: st.mode === 'fixed', c2: st.mode === 'fixed' ? '#ffffff' : '#ffb38a' }); } }
+    else if (phase === 'approach') { phaseT += dt; if (phaseT > tApp) { phase = 'hit'; phaseT = 0; ev.show(makeEvent()); renderCharts(); renderOdds(); } }
+    else if (phase === 'hit') { phaseT += dt; if (auto.left > 0 && phaseT > tHold) { auto.left--; autoUi(); if (auto.left > 0) run(); } }
+    drawAcc(phase === 'acc' ? clamp(accT / tAcc, 0, 1) : phase === 'idle' ? 0 : 1);
   }
-  function drawAcc() {
+  function drawAcc(f) {
     const ctx = accCv.getContext('2d'); const { w, h: H } = fitCanvas(accCv, ctx);
     ctx.fillStyle = SCREEN(); ctx.fillRect(0, 0, w, H);
-    const f = phase === 'acc' ? clamp(accT / 2, 0, 1) : phase === 'hit' ? 1 : 0;
     const col0 = P?.q === 0 ? '#9aa2b8' : '#8fdcff';
     const font = '"Source Sans 3", system-ui, sans-serif';
+    const x0 = 250, x1 = w - 40;
     if (st.type === 'linac') {
-      const y = H / 2, x0 = 30, x1 = w - 70;
-      ctx.fillStyle = 'rgba(166,176,200,.12)'; ctx.fillRect(x0, y - 14, x1 - x0, 28);
-      for (let i = 0; i < 14; i++) { const x = x0 + (i + 0.5) * (x1 - x0) / 14; ctx.fillStyle = `rgba(242,184,75,${0.2 + 0.5 * ((Math.sin(accT * 20 - i) + 1) / 2) * (phase === 'acc' ? 1 : 0.3)})`; ctx.fillRect(x - 10, y - 18, 20, 36); }
+      const y = H / 2;
+      ctx.fillStyle = 'rgba(166,176,200,.12)'; ctx.fillRect(x0, y - 10, x1 - x0, 20);
+      for (let i = 0; i < 16; i++) { const x = x0 + (i + 0.5) * (x1 - x0) / 16; ctx.fillStyle = `rgba(242,184,75,${0.2 + 0.5 * ((Math.sin(accT * 20 - i) + 1) / 2) * (phase === 'acc' ? 1 : 0.3)})`; ctx.fillRect(x - 8, y - 14, 16, 28); }
       const px = x0 + (x1 - x0) * f * f;
-      for (let k = 0; k < 8; k++) glowC(ctx, px - k * 6 * f, y, 9 - k, col0, 1 - k * 0.12);
-      ctx.fillStyle = '#eee'; ctx.fillRect(x1 + 12, y - 22, 8, 44);
+      for (let k = 0; k < 8; k++) glowC(ctx, px - k * 6 * f, y, 8 - k * 0.8, col0, 1 - k * 0.12);
     } else {
-      const cx = w / 2, cy = H / 2 + 6, R = Math.min(w * 0.4, H * 0.34);
-      ctx.strokeStyle = 'rgba(166,176,200,.35)'; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.stroke();
-      for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; ctx.fillStyle = 'rgba(92,200,240,.6)'; ctx.fillRect(cx + Math.cos(a) * R - 5, cy + Math.sin(a) * R - 5, 10, 10); }
-      const ang = phase === 'idle' ? 0 : accT * (1 + f * 10);
-      for (let k = 0; k < 10; k++) glowC(ctx, cx + Math.cos(ang - k * 0.05) * R, cy + Math.sin(ang - k * 0.05) * R, 8 - k * 0.6, col0, 1 - k * 0.09);
-      if (st.mode === 'collider') for (let k = 0; k < 10; k++) glowC(ctx, cx + Math.cos(-ang + k * 0.05 + Math.PI) * R, cy + Math.sin(-ang + k * 0.05 + Math.PI) * R, 8 - k * 0.6, '#ffb38a', 1 - k * 0.09);
+      const cx = (x0 + x1) / 2, cy = H / 2, R = Math.min((x1 - x0) * 0.42, H * 0.36);
+      ctx.strokeStyle = 'rgba(166,176,200,.35)'; ctx.lineWidth = 8; ctx.beginPath(); ctx.ellipse(cx, cy, R * 2.2, R, 0, 0, 7); ctx.stroke();
+      const ang = phase === 'idle' ? 0 : accT * (1 + f * 12);
+      for (let k = 0; k < 10; k++) glowC(ctx, cx + Math.cos(ang - k * 0.05) * R * 2.2, cy + Math.sin(ang - k * 0.05) * R, 7 - k * 0.5, col0, 1 - k * 0.09);
+      if (st.mode === 'collider') for (let k = 0; k < 10; k++) glowC(ctx, cx + Math.cos(-ang + k * 0.05 + Math.PI) * R * 2.2, cy + Math.sin(-ang + k * 0.05 + Math.PI) * R, 7 - k * 0.5, '#ffb38a', 1 - k * 0.09);
     }
     const shown = kin && P ? kinematics(P, kin.KE * f * f) : null;
-    ctx.font = `700 15px ${font}`; ctx.fillStyle = '#f2b84b'; ctx.textAlign = 'left';
-    if (shown && f > 0) { ctx.fillText(`v = ${pctC(shown)}% of light speed`, 14, H - 34); ctx.fillStyle = '#eee'; ctx.fillText(`E = ${fmtE(shown.KE)}   γ = ${fmt(shown.gamma, 4)}`, 14, H - 14); }
-    ctx.font = `600 13px ${font}`; ctx.fillStyle = 'rgba(220,220,230,.6)'; ctx.fillText(`${st.type === 'linac' ? 'Linear accelerator' : 'Ring'} · ${lenV.textContent}`, 14, 22);
+    ctx.textAlign = 'left';
+    ctx.font = `600 12.5px ${font}`; ctx.fillStyle = 'rgba(220,220,230,.6)'; ctx.fillText(`${st.type === 'linac' ? 'Linear accelerator' : 'Ring'} · ${lenV.textContent}`, 16, 24);
+    if (shown && f > 0) { ctx.font = `700 15px ${font}`; ctx.fillStyle = '#f2b84b'; ctx.fillText(`${pctC(shown)}% of c`, 16, H / 2 + 2); ctx.fillStyle = '#eee'; ctx.font = `600 13px ${font}`; ctx.fillText(`${fmtE(shown.KE)} · γ ${fmt(shown.gamma, 3)}`, 16, H / 2 + 22); }
   }
 
-  const presetList = h('div', { class: 'src-list' }, PRESETS.map(p => h('button', { class: 'src-btn', style: { '--c': '#5cc8f0' }, onclick: () => loadPreset(p) }, h('span', { class: 'dot' }), h('span', {}, h('b', {}, p.name), h('span', {}, p.sub)), h('span', { class: 'n' }, '→'))));
+  // ---------- Higgs odds ----------
+  const oddsBox = h('div', { class: 'stack', style: { gap: '10px' } });
+  function renderOdds() {
+    const procs = procList();
+    const sig = kind === 'ee' ? procs.reduce((a, p) => a + p.sigma, 0) : procs.find(p => p.key === 'minbias')?.sigma || 0;
+    const hgg = procs.find(p => p.key === 'Hgg'), zh = procs.find(p => p.key === 'ee_ZH');
+    const sH = hgg ? hgg.sigma / 0.00227 : zh ? zh.sigma : 0;
+    if (!sH || !sig) {
+      const need = 125.1 + (kind === 'ee' ? 91.2 : 0);
+      oddsBox.replaceChildren(h('p', { style: { margin: 0 } }, `No Higgs bosons possible here. Making one takes at least ${need.toFixed(0)} GeV of collision energy${kind === 'ee' ? ' (it is made together with a Z)' : ', and in practice a few TeV, because quarks and gluons carry only part of each proton\'s energy'}. You have ${fmtE(col.sqrtS)}.`));
+      return;
+    }
+    const pH = sH / sig, pgg = hgg ? hgg.sigma / sig : pH;
+    const N = Math.max(1, +autoN.value || 100);
+    const atLeast = 1 - Math.exp(-N * pH);
+    oddsBox.replaceChildren(
+      h('div', { class: 'kpis' },
+        h('div', {}, h('b', {}, `1 in ${oneInStr(1 / pH)}`), h('span', {}, 'collisions makes a Higgs')),
+        hgg ? h('div', {}, h('b', {}, `1 in ${oneInStr(1 / pgg)}`), h('span', {}, 'gives Higgs → γγ')) : ''),
+      h('p', { class: 'small', style: { margin: 0 } }, `Chance of at least one Higgs in your next ${N.toLocaleString()} collisions: ${atLeast < 1e-4 ? sci(atLeast * 100, 2) : fmt(atLeast * 100, 3)}%. So far this session made about ${Math.round(session.higgs).toLocaleString()}. The LHC makes roughly one Higgs per second, among a billion collisions per second.`));
+  }
+  function oneInStr(v) { return v >= 1e6 ? sci(v, 2) : Math.round(v).toLocaleString(); }
+
+  // ---------- presets, runs, auto ----------
   function loadPreset(p) {
     const pick = v => (['e-', 'e+', 'p', 'pbar', 'n'].includes(v) ? v : findNuclide(v));
     st.beam = pick(p.beam); st.target = pick(p.target); st.mode = p.mode; st.type = p.type; st.L = p.L;
@@ -377,54 +436,57 @@ export function buildCollider(root, { openElement }) {
     st.KE = p.KE != null ? p.KE : p.KEu * particleOf(st.beam).A;
     update(); run();
   }
+  const presetSel = h('select', { id: 'col-preset', onchange: e => { const p = PRESETS[+e.target.value]; if (p) loadPreset(p); } }, h('option', { value: '' }, 'Choose a famous experiment…'), ...PRESETS.map((p, i) => h('option', { value: i }, `${p.name} · ${p.sub}`)));
+  const presetGrid = h('div', { class: 'preset-grid' }, PRESETS.map(p => h('button', { class: 'src-btn', style: { '--c': '#5cc8f0' }, onclick: () => { loadPreset(p); tabsC.show('plots'); } }, h('span', { class: 'dot' }), h('span', {}, h('b', {}, p.name), h('span', {}, p.sub)), h('span', { class: 'n' }, '→'))));
   const lumiRun = L => {
     if (res.view !== 'detector' || kind === 'ee' || kind === 'ep') { toast('Luminosity runs apply to hadron colliders. Use the collision counts instead.'); return; }
     runMany(Math.round(L * 1000 * procList().find(p => p.key === 'minbias').sigma));
   };
-  const runBtns = h('div', { class: 'row' }, ...[[1, 'Collide once'], [100, '×100'], [1e4, '×10,000'], [1e6, '×1 million'], [1e9, '×1 billion']].map(([n, l]) => h('button', { class: `btn ${n === 1 ? 'primary' : ''}`, onclick: () => (n === 1 ? run() : runMany(n)) }, l)));
-  const lumiBtns = h('div', { class: 'row' }, h('span', { class: 'small muted' }, 'Run like the LHC:'),
-    ...[[1, '1 fb⁻¹'], [139, '139 fb⁻¹ (Run 2)'], [3000, '3000 fb⁻¹ (HL-LHC)']].map(([L, l]) => h('button', { class: 'btn small', onclick: () => lumiRun(L) }, l)),
-    h('button', { class: 'btn small', onclick: () => { resetSession(session.key); renderCharts(); } }, 'Reset session'));
+  const autoN = h('input', { type: 'number', id: 'col-auto-n', value: 100, min: 1, max: 100000, step: 1 });
+  const autoSpeed = h('select', { id: 'col-auto-speed', style: { width: 'auto' } }, h('option', { value: 'normal' }, 'Watch each one'), h('option', { value: 'fast', selected: true }, 'Fast'), h('option', { value: 'max' }, 'As fast as possible'));
+  const autoBtn = h('button', { class: 'btn', onclick: () => { if (auto.left > 0) { auto.left = 0; autoUi(); return; } auto.total = auto.left = Math.max(1, Math.min(100000, +autoN.value || 1)); autoUi(); run(); } }, 'Start');
+  const autoBar = h('i', {}), autoTxt = h('span', { class: 'small muted' });
+  function autoUi() { const done = auto.total - auto.left; autoBtn.textContent = auto.left > 0 ? 'Stop' : 'Start'; autoBar.style.width = auto.total ? `${(done / auto.total) * 100}%` : '0'; autoTxt.textContent = auto.total ? `${done.toLocaleString()} of ${auto.total.toLocaleString()} collisions shown` : ''; }
+  autoN.addEventListener('input', () => renderOdds());
 
-  root.append(h('div', { class: 'lab' },
-    h('div', { class: 'lab-head' }, h('div', {},
-      h('div', { class: 'eyebrow' }, 'Particle Collider'),
-      h('h1', {}, 'Build an accelerator, smash anything'),
-      h('p', {}, 'Pick any projectile and target, any energy up to far beyond the most energetic particle ever detected, and collide. Rates come from measured cross sections, so a Higgs boson shows up about as often as it does at the LHC.'))),
-    h('div', { class: 'grid2' },
-      h('div', { class: 'stack' },
-        h('div', { class: 'canvas-box', style: { height: '170px' } }, accCv),
-        h('div', { class: 'panel-title' }, viewSeg, h('div', { class: 'legend-inline' }, ...[['#ff4d5e', 'muon'], ['#6ee7a8', 'electron'], ['#ffe066', 'photon'], ['#ffb347', 'jet'], ['#b388ff', 'neutrino'], ['#8fd2ff', 'charged +'], ['#ffc478', 'charged −']].map(([c, l]) => h('span', {}, h('i', { style: { background: c } }), l)))),
-        ev.root,
-        h('div', { class: 'card stack' }, title, text, noteBox, warnBox, evInfo, prodBox, whatIf, chanBox)),
-      h('div', { class: 'stack mobile-first' },
-        h('div', { class: 'card stack' },
-          h('div', { class: 'fields', style: { gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' } },
-            h('div', { class: 'field' }, h('label', {}, 'Projectile'), beamBtn.root),
-            h('div', { class: 'field' }, h('label', {}, 'Target'), tgtBtn.root)),
-          h('div', { class: 'row', style: { gap: '14px' } }, h('div', { class: 'field' }, h('label', {}, 'Collision'), modeSeg), h('div', { class: 'field' }, h('label', {}, 'Machine'), typeSeg)),
-          h('div', { class: 'field' }, h('label', { for: 'col-energy' }, 'Energy', eV), eS, marks),
-          h('div', { class: 'fields' },
-            h('div', { class: 'field' }, h('label', { for: 'col-ke' }, 'Exact energy'), h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, keIn, keUnit)),
-            h('div', { class: 'field' }, h('label', { for: 'col-speed' }, 'or speed, % of light'), spIn)),
-          h('div', { class: 'field' }, h('label', { for: 'col-len' }, 'Machine length', lenV), lenS),
-          h('div', { class: 'field' }, h('label', { for: 'col-evmode' }, 'What to record'), evSel),
-          h('button', { class: 'btn primary big', onclick: () => run() }, 'Accelerate & collide')),
-        h('div', { class: 'card stack' }, h('h3', {}, 'Your beam'), beamStats),
-        h('div', { class: 'card stack' }, h('h3', {}, 'Your machine'), machStats),
-        h('div', { class: 'card stack' }, h('h3', {}, 'The collision'), colStats),
-        h('div', { class: 'card stack' }, h('h3', {}, 'Famous experiments'), presetList))),
-    h('div', { class: 'card stack' },
-      h('div', { class: 'panel-title' }, h('h3', {}, 'Your data-taking session'), runBtns), lumiBtns, sesInfo, chartGrid,
-      h('p', { class: 'hint-text', style: { margin: 0 } }, 'Counts follow Poisson statistics from real cross sections. The Higgs bump only stands out above the background after about 10 fb⁻¹, around a million billion collisions, which is why it took the LHC until 2012.')),
-    searchBox,
-    h('div', { class: 'card stack' }, h('h3', {}, 'Real measurements this engine is built on'),
-      h('p', { class: 'hint-text', style: { margin: 0 } }, 'Rates, masses and particle counts come from these published results, interpolated between the energies where they were measured. Above 100 TeV, where no collider has been, the same measured trends are extended, anchored by cosmic-ray data.'),
-      h('div', { class: 'tbl-wrap' }, h('table', { class: 'data' }, h('thead', {}, h('tr', {}, h('th', {}, 'Quantity'), h('th', {}, 'Energy'), h('th', {}, 'Measured value'), h('th', {}, 'Source'))),
-        h('tbody', {}, DATA.map(r => h('tr', {}, ...r.map(c => h('td', {}, c))))))))));
+  // ---------- layout ----------
+  const stageEl = ev.root;
+  stageEl.classList.add('stage', 'stage-tall');
+  stageEl.style.aspectRatio = ''; stageEl.style.maxHeight = '';
+  const accBox = h('div', { class: 'stage', style: { height: '96px' } }, accCv);
+  const resultCard = h('div', { class: 'card result' }, title, text, noteBox, warnBox, evInfo, prodBox, whatIf);
+  const tabsC = tabs([
+    { key: 'plots', label: 'Session plots', body: h('div', { class: 'stack' }, h('div', { class: 'row' }, ...[[1, 'Collide once'], [100, '×100'], [1e4, '×10,000'], [1e6, '×1 million'], [1e9, '×1 billion']].map(([n, l]) => h('button', { class: `btn ${n === 1 ? 'primary' : ''}`, onclick: () => (n === 1 ? run() : runMany(n)) }, l))),
+      h('div', { class: 'row' }, h('span', { class: 'small muted' }, 'Run a whole LHC dataset:'), ...[[1, '1 fb⁻¹'], [139, '139 fb⁻¹ (Run 2)'], [3000, '3000 fb⁻¹ (HL-LHC)']].map(([L, l]) => h('button', { class: 'btn small', onclick: () => lumiRun(L) }, l)), h('button', { class: 'btn small', onclick: () => { resetSession(session.key); renderCharts(); renderOdds(); } }, 'Reset session')),
+      sesInfo, chartGrid,
+      h('p', { class: 'hint-text', style: { margin: 0 } }, 'Every collision you run, one at a time or in bulk, is added here. Counts follow Poisson statistics from measured cross sections. The Higgs always shows up at 125 GeV whatever the beam energy, because that is its mass.')), onShow: () => renderCharts() },
+    { key: 'numbers', label: 'Numbers', body: h('div', { class: 'cols' }, h('div', { class: 'card stack' }, h('h3', {}, 'Your beam'), beamStats), h('div', { class: 'card stack' }, h('h3', {}, 'Your machine'), machStats), h('div', { class: 'card stack' }, h('h3', {}, 'The collision'), colStats, chanBox)) },
+    { key: 'experiments', label: 'Famous experiments', body: presetGrid },
+    { key: 'data', label: 'Real data used', body: h('div', { class: 'stack' }, h('p', { class: 'hint-text', style: { margin: 0 } }, 'Rates, masses and particle counts come from these published results, interpolated between the energies where they were measured. Above 100 TeV, where no collider has been, the measured trends are extended, anchored by cosmic-ray data.'),
+      h('div', { class: 'tbl-wrap' }, h('table', { class: 'data' }, h('thead', {}, h('tr', {}, h('th', {}, 'Quantity'), h('th', {}, 'Energy'), h('th', {}, 'Measured value'), h('th', {}, 'Source'))), h('tbody', {}, DATA.map(r => h('tr', {}, ...r.map(c => h('td', {}, c))))))), searchBox) },
+  ]);
+  searchBox.hidden = false;
 
-  update();
-  return { show() { if (!raf) { last = 0; raf = requestAnimationFrame(frame); } ev.start(); }, hide() { cancelAnimationFrame(raf); raf = 0; ev.stop(); } };
+  workspace(root, {
+    eyebrow: 'Particle Collider', title: 'Smash anything', intro: 'Any particle or nucleus, any energy up to far beyond the most energetic particle ever detected. Rates come from real LHC measurements.',
+    side: [
+      group('Start from', presetSel),
+      group('Collide', h('div', { class: 'field' }, h('label', {}, 'Projectile'), beamBtn.root), h('div', { class: 'field' }, h('label', {}, 'Target'), tgtBtn.root),
+        h('div', { class: 'row', style: { gap: '12px' } }, h('div', { class: 'field' }, h('label', {}, 'Collision'), modeSeg), h('div', { class: 'field' }, h('label', {}, 'Machine'), typeSeg))),
+      group('Energy', h('div', { class: 'field' }, h('label', { for: 'col-energy' }, 'Beam energy', eV), eS, marks),
+        h('div', { class: 'fields' }, h('div', { class: 'field' }, h('label', { for: 'col-ke' }, 'Exact'), h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, keIn, keUnit)), h('div', { class: 'field' }, h('label', { for: 'col-speed' }, 'Speed, % of c'), spIn)),
+        h('div', { class: 'field' }, h('label', { for: 'col-len' }, 'Machine length', lenV), lenS)),
+      group('Record', h('div', { class: 'field' }, h('label', { for: 'col-evmode' }, 'What to record'), evSel), h('div', { class: 'field' }, h('label', { for: 'col-pu' }, 'Pile-up (collisions per bunch crossing)'), puSel),
+        h('button', { class: 'btn primary big', onclick: () => run() }, 'Accelerate & collide')),
+      group('Automatic run', h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, h('div', { class: 'field', style: { flex: 1 } }, h('label', { for: 'col-auto-n' }, 'Collisions'), autoN), h('div', { class: 'field' }, h('label', { for: 'col-auto-speed' }, 'Speed'), autoSpeed)), h('div', { class: 'row' }, autoBtn, autoTxt), h('div', { class: 'progress' }, autoBar)),
+      group('Chance of a Higgs', oddsBox),
+    ],
+    main: [accBox, h('div', { class: 'panel-title' }, viewSeg, h('div', { class: 'legend-inline' }, ...[['#ff4d5e', 'muon'], ['#6ee7a8', 'electron'], ['#ffe066', 'photon'], ['#ffb347', 'jet'], ['#b388ff', 'neutrino'], ['#8fd2ff', 'charged +'], ['#ffc478', 'charged −']].map(([c, l]) => h('span', {}, h('i', { style: { background: c } }), l)))),
+      stageEl, resultCard, tabsC.root],
+  });
+
+  update(); renderOdds();
+  return { show() { if (!raf) { last = 0; raf = requestAnimationFrame(frame); } ev.start(); }, hide() { cancelAnimationFrame(raf); raf = 0; ev.stop(); auto.left = 0; autoUi(); } };
 }
 
 const NAMES = { mu: p => `muon μ${p.q > 0 ? '⁺' : '⁻'}`, e: p => `electron e${p.q > 0 ? '⁺' : '⁻'}`, gamma: () => 'photon γ', jet: () => 'jet (quark or gluon)', bjet: () => 'b-quark jet', nu: () => 'neutrino (missing energy)', trk: p => `${p.name || 'π'}${p.q > 0 ? '⁺' : '⁻'}`, tau: p => `tau τ${p.q > 0 ? '⁺' : '⁻'}` };

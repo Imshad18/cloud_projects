@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { h, fmt, sci, clamp, easeInOut } from '../util.js';
 import { bySym, CATEGORIES } from '../store.js';
 import { SOURCES, SOURCE_ORDER } from '../data/origins.js';
+import { workspace, group } from './ui.js';
 
 // Mass fraction (%), where it lives, and what it does. Values: typical 70 kg adult.
 const BODY = [
@@ -86,15 +87,15 @@ function sampleRegion(region) {
 }
 
 export function buildBody(root, { openElement }) {
-  const N = 42000;
-  const st = { color: 'element', count: 'atoms', focus: null, mass: 70, layers: { soft: true, skin: true, bone: true, blood: true, brain: true, thyroid: true, liver: true }, stars: false };
+  const N = 60000;
+  const st = { color: 'element', count: 'atoms', focus: null, srcFocus: null, mass: 70, layers: { soft: true, skin: true, bone: true, blood: true, brain: true, thyroid: true, liver: true }, stars: false };
   // atoms per element (relative) for the "by atoms" view
   const atoms = BODY.map(([s, pct]) => pct / bySym[s].mass);
   const atomsTot = atoms.reduce((a, b) => a + b, 0);
 
   const canvas = h('canvas', { 'aria-label': '3D human body made of elements' });
   const labels = h('div', { style: { position: 'absolute', inset: 0, pointerEvents: 'none' } });
-  const stage = h('div', { class: 'body-stage' }, canvas, labels);
+  const stage = h('div', { class: 'stage stage-tall body-stage' }, canvas, labels);
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   const scene = new THREE.Scene();
@@ -140,25 +141,45 @@ export function buildBody(root, { openElement }) {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   const dot = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d'), g = x.createRadialGradient(16, 16, 0, 16, 16, 16); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.4, 'rgba(255,255,255,.6)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c); })();
-  const mat = new THREE.PointsMaterial({ size: 0.014, vertexColors: true, map: dot, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  const mat = new THREE.PointsMaterial({ size: 0.011, vertexColors: true, map: dot, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending });
   const points = new THREE.Points(geo, mat);
   scene.add(points);
+  // Smooth glowing silhouette (fresnel rim light) around the atoms
+  const shellMat = new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color('#7fb8ff') }, uAlpha: { value: 1 } },
+    vertexShader: 'varying vec3 vN; varying vec3 vV; void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+    fragmentShader: 'uniform vec3 uColor; uniform float uAlpha; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.0 - abs(dot(vN, vV)), 2.2); gl_FragColor = vec4(uColor * f, f * 0.55 * uAlpha); }',
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  const shell = new THREE.Group();
+  for (const [ax, ay, az, bx, by, bz, r] of PARTS) {
+    const a = new THREE.Vector3(ax, ay, az), b = new THREE.Vector3(bx, by, bz), len = a.distanceTo(b);
+    const m = new THREE.Mesh(new THREE.CapsuleGeometry(r * 1.05, len, 8, 24), shellMat);
+    m.position.copy(a).add(b).multiplyScalar(0.5);
+    if (len > 1e-6) m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+    m.scale.z = 0.8;
+    shell.add(m);
+  }
+  scene.add(shell);
+  const floor = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.42, 64), new THREE.MeshBasicMaterial({ color: 0x7fb8ff, transparent: true, opacity: 0.12, side: THREE.DoubleSide }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = 0.005; scene.add(floor);
   const ELCOL = { H: '#e8f1ff', O: '#ff4d4d', C: '#9aa0a6', N: '#4f7dff', Ca: '#3ddc84', P: '#ff9f1a', K: '#b58cff', S: '#ffe14d', Na: '#9b6bff', Cl: '#4de0a0', Mg: '#7dff6b', Fe: '#ff7a1a', F: '#b0ff4d', Zn: '#8c9dff', Si: '#f0c89a', Cu: '#ff9966', I: '#c04dff', Se: '#ffa64d', Mn: '#a080ff', Mo: '#60d0c0', Co: '#ff80b0', Cr: '#90a0c0' };
   const tmp = new THREE.Color();
   function colorize() {
     for (let k = 0; k < N; k++) {
       const i = elIdx[k], sym = BODY[i][0];
-      const visible = st.layers[region[k]] && (!st.focus || st.focus === sym);
+      const visible = st.layers[region[k]] && (!st.focus || st.focus === sym) && (st.srcFocus == null || srcOf[k] === st.srcFocus);
       let c;
       if (st.color === 'element') c = ELCOL[sym] || CATEGORIES[bySym[sym].cat].color;
       else if (st.color === 'origin') c = SOURCES[SOURCE_ORDER[srcOf[k]]].color;
       else c = REGION_COLORS[region[k]];
       tmp.set(c);
-      const f = visible ? (st.focus ? 1 : 0.85) : (st.focus ? 0.03 : 0);
+      const hl = st.focus || st.srcFocus != null;
+      const f = visible ? (hl ? 1 : 0.8) : (hl ? 0.035 : 0);
       col[k * 3] = tmp.r * f; col[k * 3 + 1] = tmp.g * f; col[k * 3 + 2] = tmp.b * f;
     }
     geo.attributes.color.needsUpdate = true;
-    mat.size = st.focus ? 0.02 : 0.014;
+    mat.size = st.focus || st.srcFocus != null ? 0.016 : 0.011;
   }
 
   // Animation between body and "back to the stars"
@@ -169,6 +190,14 @@ export function buildBody(root, { openElement }) {
     const dt = Math.min(0.05, (ts - (last || ts)) / 1000); last = ts;
     const r = stage.getBoundingClientRect();
     if (canvas.width !== Math.round(r.width * renderer.getPixelRatio())) { renderer.setSize(r.width, r.height, false); camera.aspect = r.width / r.height; camera.updateProjectionMatrix(); }
+    // move the camera so the whole scene stays in view (body close up, star clusters wide)
+    const e0 = easeInOut(morph);
+    if (camMove) {
+      const want = new THREE.Vector3(0, 1.0 + e0 * 0.05, 3.1 + e0 * 5.2), wantT = new THREE.Vector3(0, 0.95 + e0 * 0.05, -0.6 * e0);
+      camera.position.lerp(want, Math.min(1, dt * 3)); controls.target.lerp(wantT, Math.min(1, dt * 3));
+      if (camera.position.distanceTo(want) < 0.02) camMove = false;
+    }
+    shellMat.uniforms.uAlpha.value = 1 - e0; floor.material.opacity = 0.12 * (1 - e0);
     if (morph !== target) {
       morph = target > morph ? Math.min(target, morph + dt / 2.2) : Math.max(target, morph - dt / 2.2);
       const e = easeInOut(morph);
@@ -194,7 +223,8 @@ export function buildBody(root, { openElement }) {
   const massV = h('b', {}, `${st.mass} kg`);
   massS.addEventListener('input', () => { st.mass = +massS.value; massV.textContent = `${st.mass} kg`; renderList(); renderInfo(); });
   const layerBox = h('div', { class: 'row' }, Object.keys(REGION_COLORS).map(r => h('label', { class: 'row small', style: { gap: '5px' } }, h('input', { type: 'checkbox', checked: true, onchange: e => { st.layers[r] = e.target.checked; colorize(); } }), h('span', { style: { width: '10px', height: '10px', borderRadius: '3px', background: REGION_COLORS[r], display: 'inline-block' } }), r === 'soft' ? 'muscle & organs' : r)));
-  const starBtn = h('button', { class: 'btn primary', onclick: () => { st.stars = !st.stars; target = st.stars ? 1 : 0; starBtn.textContent = st.stars ? 'Put me back together' : 'Send my atoms back to the stars'; controls.autoRotate = !st.stars; if (st.stars) { st.color = 'origin'; setSeg(colorSeg, 'origin'); colorize(); } } }, 'Send my atoms back to the stars');
+  let camMove = false;
+  const starBtn = h('button', { class: 'btn primary', onclick: () => { st.stars = !st.stars; target = st.stars ? 1 : 0; camMove = true; starBtn.textContent = st.stars ? 'Put me back together' : 'Send my atoms back to the stars'; controls.autoRotate = !st.stars; if (st.stars) { st.color = 'origin'; setSeg(colorSeg, 'origin'); colorize(); } } }, 'Send my atoms back to the stars');
   const rotBtn = h('button', { class: 'btn small', onclick: () => { controls.autoRotate = !controls.autoRotate; } }, 'Rotate on/off');
   const list = h('div', { class: 'el-list' });
   const info = h('div', { class: 'card stack' });
@@ -205,7 +235,7 @@ export function buildBody(root, { openElement }) {
     list.replaceChildren(...BODY.map(([sym, pct], i) => {
       const e = bySym[sym], share = st.count === 'atoms' ? atoms[i] / tot * 100 : pct;
       const grams = st.mass * 1000 * pct / 100;
-      return h('button', { class: `el-row ${st.focus === sym ? 'on' : ''}`, style: { '--c': ELCOL[sym] }, onclick: () => { st.focus = st.focus === sym ? null : sym; colorize(); renderList(); renderInfo(); } },
+      return h('button', { class: `el-row ${st.focus === sym ? 'on' : ''}`, style: { '--c': ELCOL[sym] }, onclick: () => { st.focus = st.focus === sym ? null : sym; st.srcFocus = null; renderMix(); colorize(); renderList(); renderInfo(); } },
         h('span', { class: 'sym' }, sym),
         h('span', {}, h('b', {}, e.name), h('div', { class: 'bar' }, h('i', { style: { width: `${Math.max(1, Math.log10(share * 1e6 + 1) / 8 * 100)}%`, background: ELCOL[sym] } }))),
         h('span', { class: 'v' }, grams >= 1000 ? `${fmt(grams / 1000, 3)} kg` : grams >= 1 ? `${fmt(grams, 3)} g` : `${fmt(grams * 1000, 3)} mg`, h('small', {}, `${share >= 0.01 ? fmt(share, 3) : sci(share, 2)}%${st.count === 'atoms' ? ' of atoms' : ''}`)));
@@ -233,27 +263,24 @@ export function buildBody(root, { openElement }) {
     const real = {}; let rt = 0;
     BODY.forEach(([sym], i) => { const wgt = st.count === 'atoms' ? atoms[i] : BODY[i][1]; for (const o of bySym[sym].origin) { real[o.src] = (real[o.src] || 0) + wgt * o.pct; rt += wgt * o.pct; } });
     const arr = SOURCE_ORDER.filter(k => real[k]).map(k => [k, real[k] / rt * 100]).sort((a, b) => b[1] - a[1]);
-    mix.replaceChildren(h('h3', {}, 'Where your atoms were born'), h('div', { class: 'origin-bar' }, arr.map(([k, p]) => h('button', { title: `${SOURCES[k].name} ${p.toFixed(1)}%`, style: { flex: p, background: SOURCES[k].color } }))),
-      h('div', { class: 'origin-legend' }, arr.map(([k, p]) => h('button', {}, h('span', { style: { width: '12px', height: '12px', borderRadius: '4px', background: SOURCES[k].color, display: 'block' } }), SOURCES[k].name, h('span', { class: 'pct' }, `${p.toFixed(1)}%`)))),
+    const pickSrc = k => { const i = SOURCE_ORDER.indexOf(k); st.srcFocus = st.srcFocus === i ? null : i; if (st.srcFocus != null) { st.focus = null; st.color = 'origin'; setSeg(colorSeg, 'origin'); } colorize(); renderMix(); renderList(); };
+    const onK = k => st.srcFocus === SOURCE_ORDER.indexOf(k);
+    mix.replaceChildren(h('div', { class: 'origin-bar' }, arr.map(([k, p]) => h('button', { class: onK(k) ? 'on' : '', title: `${SOURCES[k].name} ${p.toFixed(1)}%`, style: { flex: p, background: SOURCES[k].color }, onclick: () => pickSrc(k) }))),
+      h('div', { class: 'origin-legend' }, arr.map(([k, p]) => h('button', { class: onK(k) ? 'on' : '', onclick: () => pickSrc(k) }, h('span', { style: { width: '12px', height: '12px', borderRadius: '4px', background: SOURCES[k].color, display: 'block' } }), SOURCES[k].name, h('span', { class: 'pct' }, `${p < 0.1 && p > 0 ? p.toFixed(3) : p.toFixed(1)}%`)))),
+      h('p', { class: 'hint-text', style: { margin: 0 } }, st.srcFocus != null ? `Showing only atoms made by ${SOURCES[SOURCE_ORDER[st.srcFocus]].name.toLowerCase()}. Tap it again to show everything.` : 'Tap a source to light up its atoms in the body.'),
       h('p', { class: 'hint-text', style: { margin: 0 } }, st.count === 'atoms' ? 'Counting atoms, most of you is Big Bang hydrogen, 13.8 billion years old.' : 'By mass, most of you is oxygen and carbon forged in stars.'));
     void m; void t;
   }
 
-  root.append(h('div', { class: 'lab' },
-    h('div', { class: 'lab-head' }, h('div', {},
-      h('div', { class: 'eyebrow' }, 'Human Body'),
-      h('h1', {}, 'The stardust you are made of'),
-      h('p', {}, 'Every dot is a sample of your atoms, placed where that element really lives in the body. Colour them by element, by the cosmic event that forged them, or by body part, then send them back to the stars.'))),
-    h('div', { class: 'grid2' },
-      h('div', { class: 'stack' }, stage, h('div', { class: 'row' }, starBtn, rotBtn, h('span', { class: 'hint-text' }, 'Drag to rotate · scroll or pinch to zoom where you point')), info),
-      h('div', { class: 'stack mobile-first' },
-        h('div', { class: 'card stack' },
-          h('div', { class: 'field' }, h('label', {}, 'Colour by'), colorSeg),
-          h('div', { class: 'field' }, h('label', {}, 'Count'), countSeg),
-          h('div', { class: 'field' }, h('label', { for: 'body-mass' }, 'Body mass', massV), massS),
-          h('div', { class: 'field' }, h('label', {}, 'Show'), layerBox)),
-        h('div', { class: 'card stack' }, mix),
-        h('div', { class: 'card stack' }, h('h3', {}, 'Elements in you'), list)))));
+  workspace(root, {
+    eyebrow: 'Human Body', title: 'The stardust you are made of', intro: 'Every glowing dot is a sample of your atoms, placed where that element really lives in the body.',
+    side: [
+      group('View', h('div', { class: 'field' }, h('label', {}, 'Colour by'), colorSeg), h('div', { class: 'field' }, h('label', {}, 'Count'), countSeg), h('div', { class: 'field' }, h('label', { for: 'body-mass' }, 'Body mass', massV), massS), h('div', { class: 'field' }, h('label', {}, 'Show'), layerBox)),
+      group('Where your atoms were born', mix),
+      group('Elements in you', list),
+    ],
+    main: [stage, h('div', { class: 'row' }, starBtn, rotBtn, h('span', { class: 'hint-text' }, 'Drag to rotate · scroll or pinch to zoom where you point')), info],
+  });
 
   build(); renderList(); renderInfo(); renderMix();
   countSeg.addEventListener('click', () => renderMix());
