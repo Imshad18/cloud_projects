@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stardust Periodic Table</title>
+<meta name="description" content="An interactive 3D periodic table and nuclear physics lab: cosmic origins, isotopes, half-lives, fusion, fission and a particle collider.">
+<meta name="theme-color" content="#06070f">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="stage" aria-label="3D periodic table">
+  <canvas id="bg"></canvas>
+  <div id="css3d"></div>
+</div>
+
+<header id="topbar">
+  <button class="brand" id="brand" title="Back to the table">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span class="brand-name">Stardust</span>
+  </button>
+  <nav id="nav" aria-label="Labs">
+    <button data-view="table" class="on">Table</button>
+    <button data-view="origins">Cosmic Origins</button>
+    <button data-view="isotopes">Isotopes</button>
+    <button data-view="fusion">Fusion</button>
+    <button data-view="fission">Fission</button>
+    <button data-view="collider">Collider</button>
+    <button data-view="quiz">Quiz</button>
+  </nav>
+  <div class="search">
+    <input id="search" type="search" placeholder="Search: gold, Fe, 92…" autocomplete="off" aria-label="Search elements">
+    <div id="search-results" hidden></div>
+  </div>
+</header>
+
+<aside id="dock" aria-label="Table controls">
+  <button id="dock-toggle" class="dock-toggle" aria-expanded="true">Controls</button>
+  <div class="dock-body">
+    <div class="ctl">
+      <label>Shape</label>
+      <div class="seg" id="layouts">
+        <button data-layout="table" class="on">Table</button>
+        <button data-layout="sphere">Sphere</button>
+        <button data-layout="helix">Helix</button>
+        <button data-layout="grid">Grid</button>
+        <button data-layout="origins">By origin</button>
+        <button data-layout="timeline">Discovery</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <label for="colorby">Colour by</label>
+      <select id="colorby">
+        <option value="category">Category</option>
+        <option value="origin">Cosmic origin</option>
+        <option value="state">State at temperature</option>
+        <option value="halflife">Longest half-life</option>
+        <option value="abund">Abundance in the Solar System</option>
+        <option value="en">Electronegativity</option>
+        <option value="mass">Atomic mass</option>
+        <option value="density">Density</option>
+        <option value="melt">Melting point</option>
+        <option value="boil">Boiling point</option>
+        <option value="ie">Ionization energy</option>
+        <option value="year">Discovery year</option>
+        <option value="block">Block (s, p, d, f)</option>
+        <option value="body">In the human body</option>
+      </select>
+    </div>
+    <div class="ctl grow" id="temp-row" hidden>
+      <label for="temp">Temperature <b id="temp-val">298 K</b></label>
+      <input id="temp" type="range" min="0" max="6000" step="1" value="298">
+      <div class="marks"><button data-t="0">0 K</button><button data-t="298">Room</button><button data-t="1811">Fe melts</button><button data-t="5778">Sun</button></div>
+    </div>
+    <div class="ctl grow">
+      <label for="year">Time machine <b id="year-val">today</b></label>
+      <input id="year" type="range" min="1650" max="2026" step="1" value="2026">
+    </div>
+  </div>
+</aside>
+
+<div id="legend" aria-live="polite"></div>
+<div id="tooltip" role="tooltip" hidden></div>
+<section id="panel" aria-label="Element details" hidden></section>
+
+<main id="views">
+  <section class="view" id="view-origins" hidden></section>
+  <section class="view" id="view-isotopes" hidden></section>
+  <section class="view" id="view-fusion" hidden></section>
+  <section class="view" id="view-fission" hidden></section>
+  <section class="view" id="view-collider" hidden></section>
+</main>
+
+<div id="quiz-hud" hidden></div>
+<div id="compare" hidden></div>
+<div id="lightbox" hidden></div>
+
+<div id="loader">
+  <div class="loader-inner">
+    <div class="loader-mark"></div>
+    <p>Every atom has a birthplace</p>
+  </div>
+</div>
+
+<noscript><p class="noscript">This lab needs JavaScript to run.</p></noscript>
+<script src="dist/app.js"></script>
+</body>
+</html>

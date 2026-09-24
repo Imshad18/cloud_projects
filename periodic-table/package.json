@@ -1,0 +1,17 @@
+{
+  "name": "stardust-periodic-table",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Interactive 3D periodic table and nuclear physics lab",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --minify --format=iife --target=es2020 --outfile=dist/app.js",
+    "dev": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=dist/app.js --sourcemap --watch --servedir=.",
+    "data": "python3 tools/gen_elements.py && python3 tools/gen_nuclides.py"
+  },
+  "dependencies": {
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}
