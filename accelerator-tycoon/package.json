@@ -1,0 +1,13 @@
+{
+  "name": "accelerator-tycoon",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Build, run and upgrade a particle collider, starting with the LHC",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --minify --format=iife --target=es2020 --outfile=dist/app.js",
+    "dev": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=dist/app.js --sourcemap --watch --servedir=."
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}
