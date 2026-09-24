@@ -56,7 +56,7 @@ export class Panel {
     const photo = h('div', { class: 'photo' });
     const img = h('img', { alt: el.img.title || el.name, loading: 'eager', referrerpolicy: 'no-referrer' });
     const cap = h('div', { class: 'cap' }, el.img.title || el.name);
-    const setNone = () => photo.replaceChildren(h('div', { class: 'none' }, el.n > 100 ? `Only a few atoms of ${el.name} have ever existed. No photograph is possible.` : 'The photo could not load. Check your internet connection.'));
+    const setNone = () => photo.replaceChildren(h('div', { class: 'none' }, el.n > 100 ? `Only a few atoms of ${el.name} have ever existed. No photograph is possible.` : 'The photo could not load. Photos come live from Wikimedia Commons.'));
     if (el.img.url) {
       img.src = el.img.url;
       img.onerror = async () => {
